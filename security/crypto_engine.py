@@ -12,7 +12,17 @@ from cryptography.hazmat.primitives.asymmetric import mldsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.exceptions import InvalidSignature
 
+# Load .env from project root so VERITRACE_MASTER_KEY is always available,
+# even when this module is run directly from the security/ directory.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+    _load_dotenv(dotenv_path=_ENV_PATH, override=False)
+except ImportError:
+    pass  # dotenv is optional; env var can still be set by the OS
+
 DEFAULT_MASTER_KEY_SEED = b"veritrace_default_master_key_seed_2026_veritrace_system"
+
 
 
 def get_server_master_key() -> bytes:

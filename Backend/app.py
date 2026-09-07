@@ -4,6 +4,12 @@ import os, uuid, json, time, io
 import sys
 from typing import Optional
 
+# Load environment variables from .env file at project root (before all other imports)
+from dotenv import load_dotenv
+_ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
+
+
 SECURITY_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "security"))
 if SECURITY_DIR not in sys.path:
     sys.path.insert(0, SECURITY_DIR)
