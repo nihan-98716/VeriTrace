@@ -557,7 +557,13 @@ function renderVerdict(result) {
     const actor  = result.actor_name || result.actor_id || "unknown";
     badge.textContent = `🚨 TAMPERED — broken at hop #${String(hop).padStart(2, "0")}`;
     badge.classList.add("badge-tampered");
-    detail.textContent = `Reason: ${result.reason}. Actor at broken hop: ${actor}.`;
+    
+    let segText = "";
+    if (result.tampered_segments && result.tampered_segments.length > 0) {
+      segText = `<br/><strong style="color:var(--vt-red)">🔍 Granular Alteration Localization:</strong><ul style="margin:4px 0 0 18px;text-align:left">${result.tampered_segments.map(s => `<li>${s}</li>`).join("")}</ul>`;
+    }
+    
+    detail.innerHTML = `Reason: ${result.reason}. Actor at broken hop: ${actor}.${segText}`;
 
     // Hash comparison panel for content-mismatch case
     if (result.expected_hash && result.current_hash) {
