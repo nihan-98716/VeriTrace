@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VERITRACE — Cryptographic Chain of Custody</title>
+  <meta name="description" content="VERITRACE proves what happened to a file using cryptographic chain of custody, not guessing." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Theme -->
+  <link rel="stylesheet" href="veritrace.css" />
+</head>
+<body>
+  <div class="vt-app">
+    <div class="vt-bg" aria-hidden="true"></div>
+
+    <!-- ── TOP NAV ── -->
+    <nav class="nav">
+      <div class="nav-brand">
+        <span class="nav-logo">⬡</span>
+        <span class="nav-name">VERITRACE</span>
+      </div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-screen="register" id="tab-register">
+          <span class="nav-tab-step">01</span>Register
+        </button>
+        <button class="nav-tab" data-screen="upload" id="tab-upload">
+          <span class="nav-tab-step">02</span>Upload
+        </button>
+        <button class="nav-tab" data-screen="timeline" id="tab-timeline">
+          <span class="nav-tab-step">03</span>Timeline
+        </button>
+        <button class="nav-tab" data-screen="verify" id="tab-verify">
+          <span class="nav-tab-step">04</span>Verify
+        </button>
+      </div>
+      <div class="nav-user" id="nav-user">No user selected</div>
+    </nav>
+
+    <!-- ── SCREEN 1: REGISTER ── -->
+    <section class="screen active" id="screen-register">
+      <div class="screen-header">
+        <span class="screen-eyebrow">Identity · 01</span>
+        <h1>Register Custodian</h1>
+        <p class="screen-sub">
+          Create a cryptographic identity. Each custodian gets a unique Ed25519
+          keypair stored server-side for the demo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="form-group">
+          <label for="reg-name">Custodian Name</label>
+          <input type="text" id="reg-name" placeholder="e.g. Reporter, Editor, Publisher" />
+        </div>
+        <button class="btn btn-primary" id="btn-register">Generate Identity</button>
+        <div id="reg-result" class="result-box hidden"></div>
+      </div>
+
+      <div class="section-divider">Active Custodians</div>
+      <div class="card">
+        <div id="users-list" class="users-list">
+          <p class="muted">Loading custodians…</p>
+        </div>
+        <button class="btn btn-ghost" id="btn-refresh-users" style="margin-top: 12px">↻ Refresh</button>
+      </div>
+    </section>
+
+    <!-- ── SCREEN 2: UPLOAD ── -->
+    <section class="screen" id="screen-upload">
+      <div class="screen-header">
+        <span class="screen-eyebrow">Genesis · 02</span>
+        <h1>Register File</h1>
+        <p class="screen-sub">
+          Upload a file to create its first custody record (CREATE hop). A SHA-256
+          hash and Ed25519 signature are recorded on-chain immediately.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="form-group">
+          <label for="upload-actor">Acting Custodian</label>
+          <select id="upload-actor">
+            <option value="">— select —</option>
+          </select>
+        </div>
+        <div class="drop-zone" id="upload-dropzone">
+          <div class="drop-icon">📄</div>
+          <p>Drop file here or <span class="drop-link">click to browse</span></p>
+          <input type="file" id="upload-file" class="hidden-input" />
+          <p class="drop-filename" id="upload-filename"></p>
+        </div>
+        <button class="btn btn-primary" id="btn-upload">Register File →</button>
+        <div id="upload-result" class="result-box hidden"></div>
+      </div>
+
+      <div class="section-divider">Registered Files</div>
+      <div class="card">
+        <div id="files-list" class="files-list">
+          <p class="muted">No files yet.</p>
+        </div>
+        <button class="btn btn-ghost" id="btn-refresh-files" style="margin-top: 12px">↻ Refresh</button>
+      </div>
+    </section>
+
+    <!-- ── SCREEN 3: TIMELINE ── -->
+    <section class="screen" id="screen-timeline">
+      <div class="screen-header">
+        <span class="screen-eyebrow">Audit Trail · 03</span>
+        <h1>Custody Timeline</h1>
+        <p class="screen-sub">
+          Full signed audit trail for any registered file — every hop, every actor,
+          every hash.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="form-row">
+          <div class="form-group" style="flex: 1">
+            <label for="tl-file-id">File ID</label>
+            <input type="text" id="tl-file-id" placeholder="Paste file UUID or select below" class="mono" />
+          </div>
+          <div class="form-group" style="flex: 1">
+            <label for="tl-actor">Add Action — Custodian</label>
+            <select id="tl-actor">
+              <option value="">— select —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex: 1">
+            <label for="tl-action-type">Action Type</label>
+            <select id="tl-action-type">
+              <option value="TRANSFER">TRANSFER (custody, same content)</option>
+              <option value="MODIFY">MODIFY (new file version)</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1">
+            <label for="tl-transform">Declared Transformation (optional)</label>
+            <input type="text" id="tl-transform" placeholder="e.g. compression, watermark" />
+          </div>
+        </div>
+        <div class="drop-zone compact" id="tl-dropzone">
+          <input type="file" id="tl-file" class="hidden-input" />
+          <p>Drop updated file here (required for MODIFY, optional for TRANSFER)</p>
+          <p class="drop-filename" id="tl-filename"></p>
+        </div>
+        <div class="form-row" style="gap: 8px">
+          <button class="btn btn-secondary" id="btn-action">Add Record →</button>
+          <button class="btn btn-primary" id="btn-load-history">Load History</button>
+        </div>
+        <div id="action-result" class="result-box hidden"></div>
+      </div>
+
+      <div id="timeline-container" class="timeline-container"></div>
+    </section>
+
+    <!-- ── SCREEN 4: VERIFY ── -->
+    <section class="screen" id="screen-verify">
+      <div class="screen-header">
+        <span class="screen-eyebrow">Proof · 04</span>
+        <h1>Verify File</h1>
+        <p class="screen-sub">
+          Upload any copy of a file — original or possibly tampered. VERITRACE
+          recomputes its hash and checks it against the signed chain.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="form-group">
+          <label for="verify-file-id">File ID</label>
+          <input type="text" id="verify-file-id" placeholder="Paste the file UUID" class="mono" />
+        </div>
+        <div class="drop-zone" id="verify-dropzone">
+          <div class="drop-icon">🔍</div>
+          <p>Drop file to verify or <span class="drop-link">click to browse</span></p>
+          <input type="file" id="verify-file" class="hidden-input" />
+          <p class="drop-filename" id="verify-filename"></p>
+        </div>
+        <button class="btn btn-primary" id="btn-verify">Verify Chain →</button>
+      </div>
+
+      <!-- Verdict badge -->
+      <div id="verdict-wrap" class="verdict-wrap hidden">
+        <div id="verdict-badge" class="badge"></div>
+        <div id="verdict-detail" class="verdict-detail"></div>
+      </div>
+
+      <!-- ELA heatmap -->
+      <div id="ela-wrap" class="card ela-wrap hidden">
+        <div class="ela-header">
+          <span class="ela-title">📡 ELA Heatmap</span>
+          <span class="ela-label">Supporting signal only — heuristic, not cryptographic proof</span>
+        </div>
+        <img id="ela-img" src="" alt="ELA heatmap" class="ela-img" />
+      </div>
+    </section>
+  </div>
+
+  <!-- Keep your existing app.js hooking into the IDs above -->
+  <script src="app.js"></script>
+</body>
+</html>
