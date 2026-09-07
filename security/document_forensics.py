@@ -35,7 +35,17 @@ def compute_document_merkle_tree(file_bytes: bytes, filename: str) -> Dict[str, 
         except Exception:
             pass
 
-    # Generic chunking fallback for video/audio or unhandled formats
+    # Text & Code file line-by-line granular hashing (.txt, .md, .py, .csv, .json, .html, .css)
+    if not segments and extension in ('txt', 'md', 'py', 'csv', 'json', 'html', 'css', 'log', ''):
+        try:
+            lines = file_bytes.decode('utf-8', errors='ignore').splitlines()
+            for idx, line in enumerate(lines, 1):
+                # Hash per line for exact line-number pinpointing
+                segments[f"Line {idx}"] = hashlib.sha256(line.encode('utf-8')).hexdigest()
+        except Exception:
+            pass
+
+    # Generic chunking fallback for video/audio or unhandled binary formats
     if not segments:
         chunk_size = max(1024 * 64, len(file_bytes) // 8 or 1024) # ~8 segments
         for i in range(0, len(file_bytes), chunk_size):
@@ -56,7 +66,7 @@ def compute_document_merkle_tree(file_bytes: bytes, filename: str) -> Dict[str, 
 
 def analyze_tampered_segments(original_segments: Dict[str, str], current_file_bytes: bytes, filename: str) -> List[str]:
     """
-    Compares original segment hashes against current file to return specific tampered segments.
+    Compares original segment hashes against current file to return specific tampered lines, slides, or sections.
     """
     current_info = compute_document_merkle_tree(current_file_bytes, filename)
     current_segments = current_info["segments"]
