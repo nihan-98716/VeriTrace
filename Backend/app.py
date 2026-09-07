@@ -313,12 +313,27 @@ def _resolve_file_bytes(file_id: str, uploaded) -> tuple:
 
 @app.route("/api/files/<file_id>/verify", methods=["POST"])
 def verify_file(file_id):
-    """POST a file to test tamper, OR omit file to automatically verify the original photo in chain verification."""
-    # For chain verification, always use the original file as target
-    file_bytes, filename = _resolve_original_file(file_id)
-    if not file_bytes:
-        uploaded = request.files.get("file")
-        file_bytes, filename = _resolve_file_bytes(file_id, uploaded)
+    """POST a file to test tamper, OR omit file to automatically verify."""
+    uploaded = request.files.get("file")
+    if uploaded:
+        file_bytes = uploaded.read()
+        filename = uploaded.filename
+    else:
+        conn = get_db()
+        last_rec = conn.execute(
+            "SELECT action_type FROM ledger_records WHERE file_id=? ORDER BY timestamp DESC LIMIT 1",
+            (file_id,)
+        ).fetchone()
+        conn.close()
+
+        # If the file has been redacted, target the redacted file for ZK proof verification
+        if last_rec and last_rec["action_type"] == "REDACT":
+            file_bytes, filename = _resolve_file_bytes(file_id, None)
+        else:
+            # Default to original photo for chain verification
+            file_bytes, filename = _resolve_original_file(file_id)
+            if not file_bytes:
+                file_bytes, filename = _resolve_file_bytes(file_id, None)
 
     if file_bytes is None:
         return jsonify({"error": "No file uploaded and no registered file found for this ID"}), 400
