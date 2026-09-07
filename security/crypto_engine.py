@@ -555,8 +555,14 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
         tampered_segments = []
         semantic_assessment = None
         if not is_img:
-            # Look for segments in latest or genesis metadata
-            base_segments = meta.get("segments") or records[0].get("metadata", {}).get("segments")
+            # Look for segments in genesis metadata
+            base_segments = records[0].get("metadata", {}).get("segments") or meta.get("segments")
+            if not base_segments and original_file_bytes and filename:
+                try:
+                    from document_forensics import compute_document_merkle_tree
+                    base_segments = compute_document_merkle_tree(original_file_bytes, filename).get("segments")
+                except Exception:
+                    pass
             if isinstance(base_segments, dict) and current_file_bytes and filename:
                 try:
                     from document_forensics import analyze_tampered_segments
@@ -691,7 +697,7 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
     sem_eval = None
     tampered_segs = []
     if not is_img and current_file_bytes and original_file_bytes and (current_file_bytes != original_file_bytes):
-        base_segments = meta.get("segments") or records[0].get("metadata", {}).get("segments")
+        base_segments = records[0].get("metadata", {}).get("segments")
         if not base_segments and original_file_bytes and filename:
             try:
                 from document_forensics import compute_document_merkle_tree
@@ -710,13 +716,13 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
         except Exception:
             pass
 
-    # For VERIFIED chains, compute differential image forensics if image was modified from genesis original
+    # For VERIFIED chains, compute differential image forensics strictly when declared editorial manifest is present
     img_forgery_ratio = None
     img_forgery_percent = None
     img_forged_regions = []
     img_aligned_crop = None
     img_diff_b64 = None
-    if is_img and current_file_bytes and original_file_bytes and (current_file_bytes != original_file_bytes):
+    if is_img and editorial_manifest and current_file_bytes and original_file_bytes and (current_file_bytes != original_file_bytes):
         try:
             try:
                 from editorial_verifier import evaluate_editorial_transformation

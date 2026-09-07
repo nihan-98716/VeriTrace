@@ -434,13 +434,25 @@ def verify_file(file_id):
             break
     result["editorial_manifest"] = editorial_manifest
 
-    # Editorial and Image Differential Diagnostics
+    # Phase 3: Explicit editorial transform and forgery diagnostics (strictly only for editorial manifest evals)
     is_editorial_eval = (
         result.get("status") == "VERIFIED_EDITORIAL_TRANSFORM" or
         result.get("tamper_type") in ("CONTENT_FORGERY_DETECTED", "UNAUTHORIZED_SEMANTIC_ALTERATION")
     )
     result["is_authorized_edit"] = (result.get("status") == "VERIFIED_EDITORIAL_TRANSFORM")
-    
+    if is_editorial_eval:
+        result["crop_coordinates"] = result.get("aligned_crop")
+        result["forgery_ratio"] = result.get("forgery_ratio", 0.0)
+        result["forgery_percent"] = result.get("forgery_percent", 0.0)
+        result["forged_regions"] = result.get("forged_regions", [])
+    else:
+        result.pop("forgery_ratio", None)
+        result.pop("forgery_percent", None)
+        result.pop("forged_regions", None)
+        result.pop("crop_coordinates", None)
+        result.pop("diff_heatmap_b64", None)
+        result.pop("aligned_crop", None)
+
     # Check modifications from Genesis original
     if orig_bytes and file_bytes and orig_bytes != file_bytes:
         result["is_modified_from_genesis"] = True
@@ -448,24 +460,6 @@ def verify_file(file_id):
         result["is_modified_from_genesis"] = True
     if "modified_hops" not in result:
         result["modified_hops"] = [i + 1 for i, r in enumerate(records) if r.get("action_type") in ("MODIFY", "REDACT")]
-
-    # For image assets with modifications, ensure full forensic differential payload is attached
-    if result["is_image"]:
-        if result.get("aligned_crop") and "crop_coordinates" not in result:
-            result["crop_coordinates"] = result.get("aligned_crop")
-        if orig_bytes and file_bytes and orig_bytes != file_bytes and ("forgery_percent" not in result or result.get("forgery_percent") is None):
-            try:
-                from editorial_verifier import evaluate_editorial_transformation
-                img_diff_res = evaluate_editorial_transformation(orig_bytes, file_bytes, editorial_manifest)
-                result["forgery_ratio"] = img_diff_res.get("forgery_ratio", 0.0)
-                result["forgery_percent"] = img_diff_res.get("forgery_percent", 0.0)
-                result["forged_regions"] = img_diff_res.get("forged_regions", [])
-                result["aligned_crop"] = img_diff_res.get("aligned_crop")
-                result["crop_coordinates"] = img_diff_res.get("aligned_crop")
-                if img_diff_res.get("diff_heatmap_png"):
-                    result["diff_heatmap_b64"] = base64.b64encode(img_diff_res["diff_heatmap_png"]).decode("ascii")
-            except Exception:
-                pass
 
     # Annotate with human-readable actor name so the frontend can display it
     if not result.get("valid") and "actor_id" in result:

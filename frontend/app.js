@@ -983,19 +983,14 @@ function renderVerdict(result) {
     }
   }
 
-  // Image Forensics & Differential Analysis Card
+  // FC-03-B: Editorial Transformation & Content Forgery Panel (strictly only for editorial manifest evals or content forgeries, NOT normal image modifications)
   const editWrap = $("editorial-wrap");
-  const hasImageDiff = isImg && (
+  const isEditorial = isImg && (
     result.status === "VERIFIED_EDITORIAL_TRANSFORM" ||
     result.tamper_type === "CONTENT_FORGERY_DETECTED" ||
-    result.tamper_type === "UNAUTHORIZED_SEMANTIC_ALTERATION" ||
-    result.forgery_percent !== undefined ||
-    (result.forged_regions && result.forged_regions.length > 0) ||
-    result.is_modified_from_genesis ||
-    result.diff_heatmap_b64 ||
-    result.status === "TAMPERED"
+    result.tamper_type === "UNAUTHORIZED_SEMANTIC_ALTERATION"
   );
-  if (editWrap && hasImageDiff) {
+  if (editWrap && isEditorial) {
     editWrap.classList.remove("hidden");
     const forgeryPct = typeof result.forgery_percent === "number"
       ? result.forgery_percent
