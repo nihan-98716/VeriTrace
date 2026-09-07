@@ -1,0 +1,31 @@
+# ─── Python Runtime ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# ─── Virtual Environments ─────────────────────────────────────────────────────
+.env/
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Secrets & Environment Variables ─────────────────────────────────────────
+# CRITICAL: Never commit real secrets to Git.
+.env
+!.env.example
+
+# ─── VeriTrace Database & Uploads ────────────────────────────────────────────
+Backend/veritrace.db
+Backend/uploads/
+
+# ─── OS & Editor Artefacts ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.log

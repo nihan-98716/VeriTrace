@@ -4,6 +4,12 @@ import os, uuid, json, time, io
 import sys
 from typing import Optional
 
+# Load environment variables from .env file at project root (before all other imports)
+from dotenv import load_dotenv
+_ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
+
+
 SECURITY_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "security"))
 if SECURITY_DIR not in sys.path:
     sys.path.insert(0, SECURITY_DIR)
@@ -12,6 +18,7 @@ from db import get_db, init_db
 from crypto_engine import (
     generate_keypair, pubkey_to_str, pubkey_from_str,
     privkey_to_str, privkey_from_str,
+    encrypt_private_key_envelope, decrypt_private_key_envelope,
     hash_file_bytes, create_record, verify_chain
 )
 from ela import compute_ela
@@ -28,7 +35,7 @@ PRIVATE_KEYS = {}
 
 
 def _get_private_key(actor_id: str):
-    """Retrieve private key from memory cache, SQLite db, or recover for demo custodian."""
+    """Retrieve private key from memory cache, SQLite db (AES-256-GCM envelope), or recover for demo custodian."""
     if not actor_id:
         return None
     if actor_id in PRIVATE_KEYS:
@@ -40,13 +47,22 @@ def _get_private_key(actor_id: str):
         conn.close()
         return None
 
-    # Load from SQLite if saved
+    # Load from SQLite if saved (decrypt AES-256-GCM envelope and verify HMAC)
     if "private_key" in user.keys() and user["private_key"]:
         try:
-            priv = privkey_from_str(user["private_key"])
-            PRIVATE_KEYS[actor_id] = priv
-            conn.close()
-            return priv
+            priv = decrypt_private_key_envelope(user["private_key"], actor_id)
+            if priv:
+                PRIVATE_KEYS[actor_id] = priv
+                # Auto-upgrade legacy plaintext keys in DB to encrypted envelope format
+                if not user["private_key"].startswith('{"v":'):
+                    try:
+                        enc_env = encrypt_private_key_envelope(priv, actor_id)
+                        conn.execute("UPDATE users SET private_key=? WHERE id=?", (enc_env, actor_id))
+                        conn.commit()
+                    except Exception:
+                        pass
+                conn.close()
+                return priv
         except Exception:
             pass
 
@@ -54,10 +70,11 @@ def _get_private_key(actor_id: str):
     # generate a valid keypair and update the database so they can sign immediately!
     priv, pub = generate_keypair()
     PRIVATE_KEYS[actor_id] = priv
+    enc_envelope = encrypt_private_key_envelope(priv, actor_id)
     try:
         conn.execute(
             "UPDATE users SET private_key=?, public_key=? WHERE id=?",
-            (privkey_to_str(priv), pubkey_to_str(pub), actor_id)
+            (enc_envelope, pubkey_to_str(pub), actor_id)
         )
         conn.commit()
     except Exception:
@@ -75,12 +92,15 @@ def register_user():
     priv, pub = generate_keypair()
     PRIVATE_KEYS[user_id] = priv
 
+    enc_envelope = encrypt_private_key_envelope(priv, user_id)
+
     conn = get_db()
     conn.execute("INSERT INTO users (id, name, public_key, private_key, revoked_at) VALUES (?, ?, ?, ?, NULL)",
-                 (user_id, name, pubkey_to_str(pub), privkey_to_str(priv)))
+                 (user_id, name, pubkey_to_str(pub), enc_envelope))
     conn.commit()
     conn.close()
     return jsonify({"user_id": user_id, "name": name, "public_key": pubkey_to_str(pub)})
+
 
 
 
