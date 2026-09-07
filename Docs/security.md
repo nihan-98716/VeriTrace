@@ -88,3 +88,78 @@ If the SHA-256 hash of the current file matches the hash that was originally sig
 If the file is modified, the newly calculated hash will differ, causing signature verification to fail.
 
 > **In short:** SHA-256 provides the file's digital fingerprint, while RSA signing proves that the fingerprint was created by the holder of the private key and has not been altered.
+
+**### Security Development Log — Transition from RSA to Ed25519**
+
+After implementing the initial **SHA-256 + RSA** security mechanism, we will test the system for file integrity and authenticity.
+
+The initial implementation successfully demonstrates that:
+
+* SHA-256 can detect changes to file contents.
+* RSA signatures can authenticate the signed hash.
+* The RSA public key can verify the signature.
+* Modification of the file causes verification failure.
+* Modification of the stored hash or signature causes verification failure.
+
+At this stage, the basic security requirement is satisfied using RSA.
+
+However, as we extend VERITRACE to support **multiple custody records** such as CREATE, TRANSFER, and MODIFY, every record may require its own digital signature. This increases the importance of key size, signature size, signing speed, verification speed, and storage efficiency.
+
+Therefore, after completing and evaluating the RSA implementation, we will investigate modern digital signature algorithms.
+
+**Next step: replace RSA with Ed25519.**
+
+The security flow will evolve from:
+
+```text
+File
+  ↓
+SHA-256
+  ↓
+Hash
+  ↓
+RSA Private Key
+  ↓
+Digital Signature
+```
+
+to:
+
+```text
+File
+  ↓
+SHA-256
+  ↓
+Hash
+  ↓
+Ed25519 Private Key
+  ↓
+Digital Signature
+```
+
+The reason for this change is not that RSA is insecure. **RSA is our initial working implementation.** We are introducing Ed25519 because it provides a more compact and efficient signature mechanism that is better suited to VERITRACE's future design involving many signed custody records.
+
+SHA-256 will remain unchanged because it performs a different role:
+
+```text
+SHA-256  →  File Integrity
+Ed25519  →  Digital Signature / Signer Authentication
+```
+
+The next development stage will therefore be:
+
+```text
+SHA-256 + RSA
+       ↓
+Test & Evaluate
+       ↓
+Identify Requirements for Repeated Records
+       ↓
+Research Modern Signature Schemes
+       ↓
+Introduce Ed25519
+       ↓
+SHA-256 + Ed25519
+```
+
+After the Ed25519 implementation is working correctly, we will proceed to the next security enhancement: **multiple signed custody records followed by cryptographic hash chaining.**
