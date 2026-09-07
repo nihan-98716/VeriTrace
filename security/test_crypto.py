@@ -119,4 +119,32 @@ result7 = verify_chain([r_hyb], {"hybrid-actor": restored_hyb_pub}, hash_file_by
 assert result7["valid"] == True, f"Expected VERIFIED for serialized hybrid key, got: {result7}"
 print("[PASS] Test 7: Public key serialization roundtrip for hybrid keys verified")
 
-print("\n[ALL TESTS PASSED] crypto_engine.py with ML-DSA-65 & Ed25519 support is solid.")
+# ── Test 8: Granular Merkle Segment Tamper Localization ───────────────────
+file_bytes_orig = b"Header: Document Title\nSlide 1: First Slide Content\nSlide 2: Second Slide Content"
+file_bytes_modified = b"Header: Document Title\nSlide 1: First Slide Content\nSlide 2: TAMPERED Slide Content"
+
+r_merkle = create_record(
+    file_id="doc-001",
+    file_content_hash=hash_file_bytes(file_bytes_orig),
+    prev_record_hash=None,
+    action_type="CREATE",
+    actor_id=actor1,
+    private_key=priv1,
+    file_bytes=file_bytes_orig,
+    filename="document.txt"
+)
+
+result_seg = verify_chain(
+    [r_merkle],
+    {actor1: pub1},
+    hash_file_bytes(file_bytes_modified),
+    current_file_bytes=file_bytes_modified,
+    filename="document.txt"
+)
+
+assert result_seg["valid"] == False
+assert result_seg["status"] == "TAMPERED"
+assert len(result_seg.get("tampered_segments", [])) > 0
+print(f"[PASS] Test 8: Granular Merkle segment tamper localization verified ({result_seg['tampered_segments']})")
+
+print("\n[ALL TESTS PASSED] crypto_engine.py with Granular Merkle Tamper Localization is solid.")

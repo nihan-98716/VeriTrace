@@ -40,11 +40,8 @@ def register_user():
                  (user_id, name, pubkey_to_str(pub)))
     conn.commit()
     conn.close()
-<<<<<<< HEAD
-    return jsonify({"user_id": user_id, "name": name})
-=======
     return jsonify({"user_id": user_id, "name": name, "public_key": pubkey_to_str(pub)})
->>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
+
 
 
 @app.route("/api/users", methods=["GET"])
@@ -77,7 +74,8 @@ def upload_file():
         file_id=file_id, file_content_hash=content_hash,
         prev_record_hash=None, action_type="CREATE",
         actor_id=actor_id, private_key=priv,
-        metadata={"filename": uploaded.filename}
+        metadata={"filename": uploaded.filename},
+        file_bytes=file_bytes, filename=uploaded.filename
     )
 
     conn = get_db()
@@ -155,7 +153,8 @@ def verify_file(file_id):
     uploaded = request.files.get("file")
     if not uploaded:
         return jsonify({"error": "file is required"}), 400
-    current_hash = hash_file_bytes(uploaded.read())
+    file_bytes = uploaded.read()
+    current_hash = hash_file_bytes(file_bytes)
 
     conn = get_db()
     rows = conn.execute(
@@ -166,12 +165,9 @@ def verify_file(file_id):
     conn.close()
 
     public_keys = {u["id"]: pubkey_from_str(u["public_key"]) for u in users}
-<<<<<<< HEAD
-=======
     revoked_at_map = {u["id"]: u["revoked_at"] for u in users}   # None if not revoked
     actor_names = {u["id"]: u["name"] for u in users}
 
->>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
     # metadata is stored as a JSON string in SQLite — deserialize back to dict
     # so _canonical_bytes produces the same bytes that were signed at creation time
     records = []
@@ -183,11 +179,9 @@ def verify_file(file_id):
             except (json.JSONDecodeError, TypeError):
                 rec["metadata"] = {}
         records.append(rec)
-<<<<<<< HEAD
-    result = verify_chain(records, public_keys, current_hash)
-=======
 
-    result = verify_chain(records, public_keys, current_hash, revoked_at_map)
+    result = verify_chain(records, public_keys, current_hash, revoked_at_map,
+                          current_file_bytes=file_bytes, filename=uploaded.filename)
 
     # Annotate with human-readable actor name so the frontend can display it
     if not result.get("valid") and "actor_id" in result:
@@ -205,7 +199,6 @@ def verify_file(file_id):
                 })
         result["unique_actors"] = unique_actors
 
->>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
     return jsonify(result)
 
 
@@ -222,8 +215,6 @@ def file_history(file_id):
     return jsonify([dict(r) for r in rows])
 
 
-<<<<<<< HEAD
-=======
 @app.route("/api/files/<file_id>", methods=["GET"])
 def get_file_detail(file_id):
     """Return metadata for a single registered file including hop count."""
@@ -258,9 +249,6 @@ def get_stats():
         "total_records": total_records,
         "total_custodians": total_custodians
     })
-
-
->>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
 @app.route("/api/files/<file_id>/ela", methods=["POST"])
 def ela_analysis(file_id):
     """POST a file to get the ELA heatmap as a PNG image.

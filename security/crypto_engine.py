@@ -75,7 +75,19 @@ def _canonical_bytes(record: dict) -> bytes:
 
 def create_record(file_id, file_content_hash, prev_record_hash, action_type,
                    actor_id, private_key, metadata=None,
-                   declared_transformation=None):
+                   declared_transformation=None, file_bytes=None, filename=None):
+    metadata = metadata or {}
+    
+    # Granular Merkle segment hashing if file bytes are provided
+    if file_bytes and filename:
+        try:
+            from document_forensics import compute_document_merkle_tree
+            doc_info = compute_document_merkle_tree(file_bytes, filename)
+            metadata["merkle_root"] = doc_info["merkle_root"]
+            metadata["segments"] = doc_info["segments"]
+        except Exception:
+            pass
+
     record = {
         "file_id": file_id,
         "file_content_hash": file_content_hash,
@@ -84,7 +96,7 @@ def create_record(file_id, file_content_hash, prev_record_hash, action_type,
         "actor_id": actor_id,
         "declared_transformation": declared_transformation,
         "timestamp": time.time(),
-        "metadata": metadata or {},
+        "metadata": metadata,
     }
     signable = _canonical_bytes(record)
     
@@ -127,7 +139,7 @@ def verify_record_signature(record: dict, public_key) -> bool:
 
 
 def verify_chain(records: list, public_keys: dict, current_file_hash: str,
-                  revoked_at_map: dict = None) -> dict:
+                  revoked_at_map: dict = None, current_file_bytes: bytes = None, filename: str = None) -> dict:
     """
     records          : list of ledger record dicts, ORDERED oldest -> newest
     public_keys      : {actor_id: Ed25519PublicKey}
@@ -188,14 +200,28 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
     # Pillar 3: current file must match the last recorded content state
     latest = records[-1]
     if latest["file_content_hash"] != current_file_hash:
+        tampered_segments = []
+        meta = latest.get("metadata") or {}
+        if isinstance(meta, dict) and meta.get("segments") and current_file_bytes and filename:
+            try:
+                from document_forensics import analyze_tampered_segments
+                tampered_segments = analyze_tampered_segments(meta["segments"], current_file_bytes, filename)
+            except Exception:
+                pass
+
+        reason_msg = (
+            "current file hash does not match the last recorded hash — "
+            "silent modification outside the custody platform detected"
+        )
+        if tampered_segments:
+            reason_msg += f" (Altered parts: {', '.join(tampered_segments)})"
+
         return {
             "valid": False,
             "broken_at": len(records) - 1,
             "actor_id": latest["actor_id"],
-            "reason": (
-                "current file hash does not match the last recorded hash — "
-                "silent modification outside the custody platform detected"
-            ),
+            "reason": reason_msg,
+            "tampered_segments": tampered_segments,
             "expected_hash": latest["file_content_hash"],
             "current_hash": current_file_hash,
             "status": "TAMPERED"
