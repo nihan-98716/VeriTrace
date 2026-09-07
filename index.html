@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VERITRACE PRO — Cryptographic Chain of Custody</title>
+  <meta name="description" content="Cryptographic chain of custody with multi-tier step-down authority verification for digital assets." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="vt-app">
+    <div class="vt-bg" aria-hidden="true"></div>
+
+    <!-- Top Navigation Header -->
+    <nav class="nav" id="main-nav">
+      <div class="nav-brand">
+        <div class="nav-logo-wrap">
+          <svg class="nav-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </div>
+        <div class="nav-brand-text">
+          <span class="nav-name">VERITRACE</span>
+          <span class="nav-badge">CRYPTO CHAIN</span>
+        </div>
+      </div>
+
+      <div class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-screen="register" id="tab-register" role="tab" aria-selected="true">
+          <span class="nav-tab-step">01</span>
+          <span class="nav-tab-label">Identity Hub</span>
+        </button>
+        <button class="nav-tab" data-screen="upload" id="tab-upload" role="tab" aria-selected="false">
+          <span class="nav-tab-step">02</span>
+          <span class="nav-tab-label">Genesis Anchor</span>
+        </button>
+        <button class="nav-tab" data-screen="timeline" id="tab-timeline" role="tab" aria-selected="false">
+          <span class="nav-tab-step">03</span>
+          <span class="nav-tab-label">Chain Timeline</span>
+        </button>
+        <button class="nav-tab" data-screen="verify" id="tab-verify" role="tab" aria-selected="false">
+          <span class="nav-tab-step">04</span>
+          <span class="nav-tab-label">Proof & Verdict</span>
+        </button>
+      </div>
+
+      <div class="nav-status-group">
+        <div class="api-status" id="api-status" title="Backend Connection Status">
+          <span class="status-dot"></span>
+          <span class="status-label" id="status-label">Checking API...</span>
+        </div>
+        <div class="nav-user" id="nav-user">
+          <span class="user-avatar">👤</span>
+          <span class="user-name" id="nav-user-name">No Custodian Active</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-container">
+
+      <!-- ==============================================
+           SCREEN 1: IDENTITY & CUSTODIAN REGISTRATION
+           ============================================== -->
+      <section class="screen active" id="screen-register" role="tabpanel">
+        <div class="screen-header">
+          <div class="header-badge-row">
+            <span class="screen-eyebrow">STEP 01 • IDENTITY MATRIX</span>
+            <span class="screen-chip">Ed25519 Cryptographic Keys</span>
+          </div>
+          <h1>Register Custodian Authority</h1>
+          <p class="screen-sub">
+            Establish cryptographic identities across organizational hierarchies. Each custodian is minted a tamper-evident Ed25519 signing key with verified clearance.
+          </p>
+        </div>
+
+        <div class="grid-2col">
+          <!-- Registration Form Card with 2-Step Down Selection -->
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Generate New Custodian Identity</h3>
+                <p class="card-subtitle">Select organization authority and clearance level</p>
+              </div>
+            </div>
+
+            <!-- Step-down visual tracker -->
+            <div class="step-tracker">
+              <div class="step-node active" id="step-node-1">
+                <span class="step-num">1</span>
+                <span class="step-text">Department</span>
+              </div>
+              <div class="step-arrow">→</div>
+              <div class="step-node" id="step-node-2">
+                <span class="step-num">2</span>
+                <span class="step-text">Role Clearance</span>
+              </div>
+              <div class="step-arrow">→</div>
+              <div class="step-node" id="step-node-3">
+                <span class="step-num">3</span>
+                <span class="step-text">Identity Name</span>
+              </div>
+            </div>
+
+            <!-- Step Down 1: Department -->
+            <div class="form-group">
+              <label for="reg-dept">
+                <span class="step-badge">Step Down 1</span> Department / Jurisdiction
+              </label>
+              <select id="reg-dept" class="styled-select">
+                <option value="">— Select Department —</option>
+                <option value="FORENSICS">🔬 Digital Forensics & Cyber Crime Unit</option>
+                <option value="EDITORIAL">📰 Editorial & Investigative Bureau</option>
+                <option value="LEGAL">⚖️ Legal & Compliance Registry</option>
+                <option value="SECURITY">🛡️ Defense & National Security Asset Lab</option>
+              </select>
+            </div>
+
+            <!-- Step Down 2: Role & Clearance (Cascaded) -->
+            <div class="form-group">
+              <label for="reg-role">
+                <span class="step-badge">Step Down 2</span> Role & Clearance Level
+              </label>
+              <select id="reg-role" class="styled-select" disabled>
+                <option value="">— Select Department First —</option>
+              </select>
+            </div>
+
+            <!-- Step Down 3: Custodian Legal Name / Alias -->
+            <div class="form-group">
+              <label for="reg-name">
+                <span class="step-badge">Step Down 3</span> Custodian Name / Designation
+              </label>
+              <div class="input-with-action">
+                <input type="text" id="reg-name" placeholder="e.g. Inspector Alex Vance, Lead Editor Chen" />
+                <button type="button" class="btn-suggestion" id="btn-suggest-name" title="Quick auto-fill sample name">Auto-fill</button>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-glow" id="btn-register">
+              <span class="btn-icon">⚡</span> Mint Cryptographic Identity
+            </button>
+            <div id="reg-result" class="result-box hidden"></div>
+          </div>
+
+          <!-- Active Custodians Directory Card -->
+          <div class="card glass-card">
+            <div class="card-header space-between">
+              <div class="card-title-group">
+                <h3>Verified Custodian Ledger</h3>
+                <p class="card-subtitle">Active keyholders authorized to sign custody hops</p>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-refresh-users">
+                <span class="btn-icon">↻</span> Refresh
+              </button>
+            </div>
+
+            <!-- Directory Filter Step Down -->
+            <div class="filter-bar">
+              <label for="filter-custodian-dept" class="filter-label">Filter Jurisdiction:</label>
+              <select id="filter-custodian-dept" class="styled-select select-sm">
+                <option value="ALL">All Jurisdictions</option>
+                <option value="FORENSICS">Digital Forensics</option>
+                <option value="EDITORIAL">Editorial Bureau</option>
+                <option value="LEGAL">Legal Registry</option>
+                <option value="SECURITY">Defense Asset Lab</option>
+              </select>
+            </div>
+
+            <div id="users-list" class="users-list custom-scroll">
+              <div class="loader-wrap">
+                <div class="spinner"></div>
+                <p class="muted">Loading custodians...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           SCREEN 2: GENESIS FILE UPLOAD & REGISTRATION
+           ============================================== -->
+      <section class="screen" id="screen-upload" role="tabpanel">
+        <div class="screen-header">
+          <div class="header-badge-row">
+            <span class="screen-eyebrow">STEP 02 • GENESIS REGISTRATION</span>
+            <span class="screen-chip">SHA-256 Cryptographic Anchoring</span>
+          </div>
+          <h1>Genesis File Anchoring</h1>
+          <p class="screen-sub">
+            Establish the root block in the custody chain. The file is hashed with SHA-256 and digitally signed by an authorized custodian to create an immutable root hop.
+          </p>
+        </div>
+
+        <div class="grid-2col">
+          <!-- 3-Step Down Upload Form Card -->
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Register Genesis Digital Asset</h3>
+                <p class="card-subtitle">3-Tier Hierarchical Custodian & Clearance Assignment</p>
+              </div>
+            </div>
+
+            <!-- 3-Step Down Workflow Selector -->
+            <div class="step-tracker">
+              <div class="step-node active" id="upload-step-1">
+                <span class="step-num">1</span>
+                <span class="step-text">Department</span>
+              </div>
+              <div class="step-arrow">→</div>
+              <div class="step-node" id="upload-step-2">
+                <span class="step-num">2</span>
+                <span class="step-text">Custodian</span>
+              </div>
+              <div class="step-arrow">→</div>
+              <div class="step-node" id="upload-step-3">
+                <span class="step-num">3</span>
+                <span class="step-text">Classification</span>
+              </div>
+            </div>
+
+            <!-- Step Down 1: Department Filter -->
+            <div class="form-group">
+              <label for="upload-dept-filter">
+                <span class="step-badge">Step Down 1</span> Originating Department
+              </label>
+              <select id="upload-dept-filter" class="styled-select">
+                <option value="">— Select Department —</option>
+                <option value="FORENSICS">🔬 Digital Forensics & Cyber Crime Unit</option>
+                <option value="EDITORIAL">📰 Editorial & Investigative Bureau</option>
+                <option value="LEGAL">⚖️ Legal & Compliance Registry</option>
+                <option value="SECURITY">🛡️ Defense & National Security Asset Lab</option>
+                <option value="ALL">🌐 All Available Custodians</option>
+              </select>
+            </div>
+
+            <!-- Step Down 2: Acting Custodian (Filtered by Step 1) -->
+            <div class="form-group">
+              <label for="upload-actor">
+                <span class="step-badge">Step Down 2</span> Authorizing Custodian (Ed25519 Signer)
+              </label>
+              <select id="upload-actor" class="styled-select" disabled>
+                <option value="">— Select Department First —</option>
+              </select>
+            </div>
+
+            <!-- Step Down 3: Security & Sensitivity Level -->
+            <div class="form-group">
+              <label for="upload-classification">
+                <span class="step-badge">Step Down 3</span> Asset Classification & Sensitivity Tier
+              </label>
+              <select id="upload-classification" class="styled-select">
+                <option value="LEVEL-1-PUBLIC">🟢 Tier 1 — Public / Press Release</option>
+                <option value="LEVEL-2-INTERNAL">🟡 Tier 2 — Internal Restrictive Audit</option>
+                <option value="LEVEL-3-EVIDENCE" selected>🟠 Tier 3 — Chain-of-Custody Evidence Grade</option>
+                <option value="LEVEL-4-TOPSECRET">🔴 Tier 4 — High-Assurance Vault Critical</option>
+              </select>
+            </div>
+
+            <!-- Drag & Drop Zone -->
+            <div class="drop-zone" id="upload-dropzone">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <p class="drop-title">Drag & drop evidence file here</p>
+              <p class="drop-hint">or <span class="drop-link">browse from system</span> (Images, PDFs, Audio, Video)</p>
+              <input type="file" id="upload-file" class="hidden-input" />
+              <div class="file-preview-pill hidden" id="upload-file-pill">
+                <span class="pill-icon">📄</span>
+                <span class="pill-name" id="upload-filename">No file chosen</span>
+                <span class="pill-size" id="upload-filesize"></span>
+                <button type="button" class="pill-clear" id="upload-clear-file">✕</button>
+              </div>
+              <div class="live-hash-box hidden" id="upload-live-hash-box">
+                <span class="hash-tag">Client SHA-256:</span>
+                <code class="mono-hash" id="upload-live-hash">Calculating...</code>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-glow" id="btn-upload">
+              <span class="btn-icon">🔒</span> Register & Anchor Genesis Hop
+            </button>
+            <div id="upload-result" class="result-box hidden"></div>
+          </div>
+
+          <!-- Registered Assets Directory Card -->
+          <div class="card glass-card">
+            <div class="card-header space-between">
+              <div class="card-title-group">
+                <h3>Anchored Files Vault</h3>
+                <p class="card-subtitle">Click any asset to inspect its audit chain</p>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-refresh-files">
+                <span class="btn-icon">↻</span> Refresh
+              </button>
+            </div>
+
+            <div id="files-list" class="files-list custom-scroll">
+              <div class="empty-state">
+                <p class="muted">No files anchored yet. Upload your first digital evidence above.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           SCREEN 3: AUDIT TRAIL & CUSTODY TIMELINE
+           ============================================== -->
+      <section class="screen" id="screen-timeline" role="tabpanel">
+        <div class="screen-header">
+          <div class="header-badge-row">
+            <span class="screen-eyebrow">STEP 03 • PROVENANCE CHAIN</span>
+            <span class="screen-chip">Hash-Linked Merkle Ledger</span>
+          </div>
+          <h1>Cryptographic Custody Timeline</h1>
+          <p class="screen-sub">
+            Track every transformation, handover, and edit across time. Each hop carries the previous record's hash and an Ed25519 cryptographic signature.
+          </p>
+        </div>
+
+        <!-- Add Hop Action Card with 3-Step Down Hierarchy -->
+        <div class="card glass-card mb-6">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h3>Append Custody Hop Action</h3>
+              <p class="card-subtitle">3-Step Down Action Dispatcher (File → Custodian → Action Modality)</p>
+            </div>
+          </div>
+
+          <!-- Step Down Controls Grid -->
+          <div class="step-down-grid">
+            <!-- Step Down 1: Select Active Evidence File -->
+            <div class="form-group">
+              <label for="tl-file-id">
+                <span class="step-badge">Step Down 1</span> Target Evidence File
+              </label>
+              <div class="input-with-select">
+                <select id="tl-file-select" class="styled-select mb-2">
+                  <option value="">— Select Anchored File —</option>
+                </select>
+                <input type="text" id="tl-file-id" placeholder="Or paste File UUID" class="mono input-sm" />
+              </div>
+            </div>
+
+            <!-- Step Down 2: Destination / Acting Custodian -->
+            <div class="form-group">
+              <label for="tl-actor">
+                <span class="step-badge">Step Down 2</span> Handover / Acting Custodian
+              </label>
+              <select id="tl-actor" class="styled-select">
+                <option value="">— Select Authorized Custodian —</option>
+              </select>
+            </div>
+
+            <!-- Step Down 3: Action Type & Transformation Modality -->
+            <div class="form-group">
+              <label for="tl-action-type">
+                <span class="step-badge">Step Down 3</span> Custody Operation
+              </label>
+              <select id="tl-action-type" class="styled-select">
+                <option value="TRANSFER">🔄 TRANSFER (Custody Handover, Content Unchanged)</option>
+                <option value="MODIFY">✂️ MODIFY (New Revision / Authorized Edit)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Action Details Row -->
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="tl-transform">Declared Transformation Note (Audit Log)</label>
+              <input type="text" id="tl-transform" placeholder="e.g., Cropped 10% margins, Redacted PII, Lossless transcode to PNG" />
+            </div>
+          </div>
+
+          <!-- Drag and drop zone for updated file (Required for MODIFY, Optional for TRANSFER) -->
+          <div class="drop-zone compact" id="tl-dropzone">
+            <input type="file" id="tl-file" class="hidden-input" />
+            <div class="drop-compact-content">
+              <span class="drop-icon-sm">📎</span>
+              <p class="drop-compact-text" id="tl-drop-text">
+                Drop updated version file here (Required for <span class="badge-tag">MODIFY</span>, optional for <span class="badge-tag">TRANSFER</span>)
+              </p>
+            </div>
+            <div class="file-preview-pill hidden" id="tl-file-pill">
+              <span class="pill-icon">📄</span>
+              <span class="pill-name" id="tl-filename">No file chosen</span>
+              <button type="button" class="pill-clear" id="tl-clear-file">✕</button>
+            </div>
+          </div>
+
+          <div class="form-actions-row">
+            <button class="btn btn-secondary" id="btn-action">
+              <span class="btn-icon">➕</span> Append Signed Hop to Chain
+            </button>
+            <button class="btn btn-primary" id="btn-load-history">
+              <span class="btn-icon">⚡</span> Inspect Ledger History
+            </button>
+          </div>
+          <div id="action-result" class="result-box hidden"></div>
+        </div>
+
+        <!-- Visual Timeline Container -->
+        <div class="timeline-wrapper">
+          <div class="timeline-header-bar">
+            <h3>Provenance Hop Chain</h3>
+            <span class="chain-badge" id="chain-hop-count">0 Hops Loaded</span>
+          </div>
+          <div id="timeline-container" class="timeline-container">
+            <div class="empty-state">
+              <span class="empty-icon">⛓️</span>
+              <p class="muted">Select a file above and click <strong>"Inspect Ledger History"</strong> to view its cryptographic chain.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           SCREEN 4: CRYPTOGRAPHIC VERIFICATION & ELA
+           ============================================== -->
+      <section class="screen" id="screen-verify" role="tabpanel">
+        <div class="screen-header">
+          <div class="header-badge-row">
+            <span class="screen-eyebrow">STEP 04 • MATHEMATICAL VERIFICATION</span>
+            <span class="screen-chip">Zero Trust Proof Engine</span>
+          </div>
+          <h1>Cryptographic Chain Verification</h1>
+          <p class="screen-sub">
+            Upload any copy of an asset — original or suspect. VERITRACE recomputes its SHA-256 fingerprint, validates all historical Ed25519 signatures, and pinpoints any tamper attempt.
+          </p>
+        </div>
+
+        <div class="grid-2col">
+          <!-- Verification Form Card with 2-Step Down Selection -->
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Submit Asset for Verification</h3>
+                <p class="card-subtitle">2-Step Down Selection & Hash Recalculation</p>
+              </div>
+            </div>
+
+            <!-- Step Down 1: Select Registered File Reference -->
+            <div class="form-group">
+              <label for="verify-file-select">
+                <span class="step-badge">Step Down 1</span> Target Registered Ledger File
+              </label>
+              <select id="verify-file-select" class="styled-select mb-2">
+                <option value="">— Select Anchored File from Ledger —</option>
+              </select>
+              <input type="text" id="verify-file-id" placeholder="Or paste File UUID here" class="mono input-sm" />
+            </div>
+
+            <!-- Step Down 2: Verification Protocol Mode -->
+            <div class="form-group">
+              <label for="verify-mode-select">
+                <span class="step-badge">Step Down 2</span> Verification Mode & Security Rule
+              </label>
+              <select id="verify-mode-select" class="styled-select">
+                <option value="STRICT_CHAIN">🛡️ Strict Chain: Validate All Signatures & Content Hashes</option>
+                <option value="LATEST_ONLY">⚡ Latest State: Validate Final Custodian Signature Only</option>
+                <option value="FORENSIC_FULL">🔍 Forensic Deep Scan: Chain Proof + ELA Error Analysis</option>
+              </select>
+            </div>
+
+            <!-- Drop Zone for Test File -->
+            <div class="drop-zone" id="verify-dropzone">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <path d="m9 15 2 2 4-4" />
+                </svg>
+              </div>
+              <p class="drop-title">Drop suspect or original file here</p>
+              <p class="drop-hint">or <span class="drop-link">click to browse file</span></p>
+              <input type="file" id="verify-file" class="hidden-input" />
+              <div class="file-preview-pill hidden" id="verify-file-pill">
+                <span class="pill-icon">🔍</span>
+                <span class="pill-name" id="verify-filename">No file chosen</span>
+                <span class="pill-size" id="verify-filesize"></span>
+                <button type="button" class="pill-clear" id="verify-clear-file">✕</button>
+              </div>
+              <div class="live-hash-box hidden" id="verify-live-hash-box">
+                <span class="hash-tag">Current File SHA-256:</span>
+                <code class="mono-hash" id="verify-live-hash">Calculating...</code>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-glow" id="btn-verify">
+              <span class="btn-icon">⚖️</span> Recompute Chain & Verify Integrity
+            </button>
+          </div>
+
+          <!-- Verification Verdict & Forensic Output Panel -->
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Verification Report & Forensics</h3>
+                <p class="card-subtitle">Cryptographic mathematical verdict & visual analysis</p>
+              </div>
+            </div>
+
+            <!-- Verdict Badge Wrap -->
+            <div id="verdict-wrap" class="verdict-wrap hidden">
+              <div id="verdict-badge" class="badge"></div>
+              <div id="verdict-detail" class="verdict-detail"></div>
+              <div id="verdict-meta" class="verdict-meta"></div>
+            </div>
+
+            <!-- ELA Forensic Heatmap Canvas / Wrap -->
+            <div id="ela-wrap" class="card-nested ela-wrap hidden">
+              <div class="ela-header">
+                <div class="ela-title-group">
+                  <span class="ela-icon">🔬</span>
+                  <span class="ela-title">Error Level Analysis (ELA) Heatmap</span>
+                </div>
+                <span class="ela-label">Signal heuristic for pixel compression variance</span>
+              </div>
+              <div class="ela-visual-container">
+                <img id="ela-img" src="" alt="ELA heatmap" class="ela-img hidden" />
+                <canvas id="ela-canvas" class="ela-canvas hidden" width="400" height="240"></canvas>
+              </div>
+            </div>
+
+            <!-- Placeholder State -->
+            <div id="verdict-empty-state" class="empty-state">
+              <span class="empty-icon">🛡️</span>
+              <p class="muted">Upload an asset and submit verification to receive the cryptographic verdict.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="vt-footer">
+      <div class="footer-content">
+        <div class="footer-left">
+          <span class="footer-logo">◈ VERITRACE</span>
+          <span class="footer-desc">Mathematical Proof of Digital Custody • Ed25519 & SHA-256</span>
+        </div>
+        <div class="footer-right">
+          <span class="footer-tag">Live Dual Engine (WebCrypto + REST)</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
