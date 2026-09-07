@@ -85,4 +85,38 @@ result4 = verify_chain([], public_keys, hash_file_bytes(file_bytes_v1))
 assert result4["status"] == "UNKNOWN_PROVENANCE"
 print("[PASS] Test 4: empty records returns UNKNOWN_PROVENANCE")
 
-print("\n[ALL TESTS PASSED] crypto_engine.py is solid.")
+# ── Test 5: Post-Quantum ML-DSA-65 signatures ─────────────────────────────
+priv_pqc1, pub_pqc1 = generate_keypair(algo="mldsa65")
+r_pqc = create_record(
+    file_id="pqc-001",
+    file_content_hash=hash_file_bytes(file_bytes_v1),
+    prev_record_hash=None,
+    action_type="CREATE",
+    actor_id="pqc-actor",
+    private_key=priv_pqc1
+)
+result5 = verify_chain([r_pqc], {"pqc-actor": pub_pqc1}, hash_file_bytes(file_bytes_v1))
+assert result5["valid"] == True, f"Expected VERIFIED for ML-DSA-65, got: {result5}"
+print("[PASS] Test 5: ML-DSA-65 (Post-Quantum) signature verifies correctly")
+
+# ── Test 6: Hybrid dual-signatures (Ed25519 + ML-DSA-65) ─────────────────────
+priv_hyb, pub_hyb = generate_keypair(algo="hybrid")
+r_hyb = create_record(
+    file_id="hyb-001",
+    file_content_hash=hash_file_bytes(file_bytes_v1),
+    prev_record_hash=None,
+    action_type="CREATE",
+    actor_id="hybrid-actor",
+    private_key=priv_hyb
+)
+result6 = verify_chain([r_hyb], {"hybrid-actor": pub_hyb}, hash_file_bytes(file_bytes_v1))
+assert result6["valid"] == True, f"Expected VERIFIED for Hybrid, got: {result6}"
+print("[PASS] Test 6: Hybrid dual-signature (Ed25519 + ML-DSA-65) verifies correctly")
+
+str_hyb_pub = pubkey_to_str(pub_hyb)
+restored_hyb_pub = pubkey_from_str(str_hyb_pub)
+result7 = verify_chain([r_hyb], {"hybrid-actor": restored_hyb_pub}, hash_file_bytes(file_bytes_v1))
+assert result7["valid"] == True, f"Expected VERIFIED for serialized hybrid key, got: {result7}"
+print("[PASS] Test 7: Public key serialization roundtrip for hybrid keys verified")
+
+print("\n[ALL TESTS PASSED] crypto_engine.py with ML-DSA-65 & Ed25519 support is solid.")

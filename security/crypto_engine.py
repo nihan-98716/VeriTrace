@@ -4,29 +4,62 @@ import time
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey, Ed25519PublicKey
 )
+from cryptography.hazmat.primitives.asymmetric import mldsa
+from cryptography.hazmat.primitives import serialization
 from cryptography.exceptions import InvalidSignature
 
 
-def generate_keypair():
-    """Call once per user at registration. Store public key in DB,
-    give the private key back to the 'user' (for demo: keep server-side
-    in a dict keyed by user_id)."""
-    private_key = Ed25519PrivateKey.generate()
-    public_key = private_key.public_key()
-    return private_key, public_key
+def generate_keypair(algo="ed25519"):
+    """
+    Generate keypair for user.
+    algo: "ed25519", "mldsa65" (PQC ML-DSA-65), or "hybrid" (both Ed25519 + ML-DSA-65).
+    """
+    if algo == "mldsa65":
+        priv = mldsa.MLDSA65PrivateKey.generate()
+        pub = priv.public_key()
+        return priv, pub
+    elif algo == "hybrid":
+        ed_priv = Ed25519PrivateKey.generate()
+        ml_priv = mldsa.MLDSA65PrivateKey.generate()
+        priv = {"ed25519": ed_priv, "mldsa65": ml_priv}
+        pub = {"ed25519": ed_priv.public_key(), "mldsa65": ml_priv.public_key()}
+        return priv, pub
+    else:
+        priv = Ed25519PrivateKey.generate()
+        pub = priv.public_key()
+        return priv, pub
 
 
-def pubkey_to_str(public_key: Ed25519PublicKey) -> str:
-    from cryptography.hazmat.primitives import serialization
-    raw = public_key.public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw
-    )
-    return raw.hex()
+def pubkey_to_str(public_key) -> str:
+    """Serializes public key(s) to JSON string or hex string."""
+    if isinstance(public_key, dict):
+        return json.dumps({k: pubkey_to_str(v) for k, v in public_key.items()})
+    elif isinstance(public_key, mldsa.MLDSA65PublicKey):
+        raw = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw
+        )
+        return json.dumps({"algo": "mldsa65", "key": raw.hex()})
+    elif isinstance(public_key, Ed25519PublicKey):
+        raw = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw
+        )
+        return raw.hex()
+    return str(public_key)
 
 
-def pubkey_from_str(hex_str: str) -> Ed25519PublicKey:
-    return Ed25519PublicKey.from_public_bytes(bytes.fromhex(hex_str))
+def pubkey_from_str(pub_str: str):
+    """Deserializes public key(s) from string."""
+    try:
+        data = json.loads(pub_str)
+        if isinstance(data, dict):
+            if data.get("algo") == "mldsa65":
+                return mldsa.MLDSA65PublicKey.from_public_bytes(bytes.fromhex(data["key"]))
+            return {k: pubkey_from_str(v) for k, v in data.items()}
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub_str))
 
 
 def hash_file_bytes(file_bytes: bytes) -> str:
@@ -36,7 +69,7 @@ def hash_file_bytes(file_bytes: bytes) -> str:
 def _canonical_bytes(record: dict) -> bytes:
     """Deterministic serialization so signing/verifying agree byte-for-byte."""
     signable = {k: v for k, v in record.items()
-                if k not in ("record_hash", "signature")}
+                if k not in ("record_hash", "signature", "mldsa_signature", "algo")}
     return json.dumps(signable, sort_keys=True).encode()
 
 
@@ -54,19 +87,43 @@ def create_record(file_id, file_content_hash, prev_record_hash, action_type,
         "metadata": metadata or {},
     }
     signable = _canonical_bytes(record)
-    signature = private_key.sign(signable)
+    
+    if isinstance(private_key, dict):
+        ed_sig = private_key["ed25519"].sign(signable)
+        ml_sig = private_key["mldsa65"].sign(signable)
+        record["signature"] = ed_sig.hex()
+        record["mldsa_signature"] = ml_sig.hex()
+    elif isinstance(private_key, mldsa.MLDSA65PrivateKey):
+        ml_sig = private_key.sign(signable)
+        record["signature"] = ml_sig.hex()
+        record["algo"] = "mldsa65"
+    else:
+        ed_sig = private_key.sign(signable)
+        record["signature"] = ed_sig.hex()
+
     record["record_hash"] = hashlib.sha256(signable).hexdigest()
-    record["signature"] = signature.hex()
     return record
 
 
-def verify_record_signature(record: dict, public_key: Ed25519PublicKey) -> bool:
+def verify_record_signature(record: dict, public_key) -> bool:
     signable = _canonical_bytes(record)
     try:
-        public_key.verify(bytes.fromhex(record["signature"]), signable)
-        return True
+        if isinstance(public_key, dict):
+            # Hybrid mode: verify BOTH Ed25519 and ML-DSA-65
+            if "signature" not in record or "mldsa_signature" not in record:
+                return False
+            public_key["ed25519"].verify(bytes.fromhex(record["signature"]), signable)
+            public_key["mldsa65"].verify(bytes.fromhex(record["mldsa_signature"]), signable)
+            return True
+        elif isinstance(public_key, mldsa.MLDSA65PublicKey):
+            public_key.verify(bytes.fromhex(record["signature"]), signable)
+            return True
+        elif isinstance(public_key, Ed25519PublicKey):
+            public_key.verify(bytes.fromhex(record["signature"]), signable)
+            return True
     except InvalidSignature:
         return False
+    return False
 
 
 def verify_chain(records: list, public_keys: dict, current_file_hash: str,
@@ -118,11 +175,11 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
                     "status": "TAMPERED"
                 }
 
-        # Pillar 1+2: Ed25519 signature verification
+        # Pillar 1+2: Digital signature verification (Ed25519 / ML-DSA-65 / Hybrid)
         if not verify_record_signature(r, pubkey):
             return {
                 "valid": False, "broken_at": i, "actor_id": r["actor_id"],
-                "reason": f"invalid Ed25519 signature at hop {i}",
+                "reason": f"invalid digital signature at hop {i}",
                 "status": "TAMPERED"
             }
 
