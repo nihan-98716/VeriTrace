@@ -1,6 +1,11 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os, uuid, json, time, io
+import sys
+
+SECURITY_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "security"))
+if SECURITY_DIR not in sys.path:
+    sys.path.insert(0, SECURITY_DIR)
 
 from db import get_db, init_db
 from crypto_engine import (
@@ -16,6 +21,8 @@ init_db()
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Demo-only: keep private keys in memory, keyed by user_id.
+# Never do this in a real product — this is fine for a 24h hackathon demo.
 PRIVATE_KEYS = {}
 
 
@@ -33,7 +40,11 @@ def register_user():
                  (user_id, name, pubkey_to_str(pub)))
     conn.commit()
     conn.close()
+<<<<<<< HEAD
     return jsonify({"user_id": user_id, "name": name})
+=======
+    return jsonify({"user_id": user_id, "name": name, "public_key": pubkey_to_str(pub)})
+>>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
 
 
 @app.route("/api/users", methods=["GET"])
@@ -155,6 +166,12 @@ def verify_file(file_id):
     conn.close()
 
     public_keys = {u["id"]: pubkey_from_str(u["public_key"]) for u in users}
+<<<<<<< HEAD
+=======
+    revoked_at_map = {u["id"]: u["revoked_at"] for u in users}   # None if not revoked
+    actor_names = {u["id"]: u["name"] for u in users}
+
+>>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
     # metadata is stored as a JSON string in SQLite — deserialize back to dict
     # so _canonical_bytes produces the same bytes that were signed at creation time
     records = []
@@ -166,7 +183,29 @@ def verify_file(file_id):
             except (json.JSONDecodeError, TypeError):
                 rec["metadata"] = {}
         records.append(rec)
+<<<<<<< HEAD
     result = verify_chain(records, public_keys, current_hash)
+=======
+
+    result = verify_chain(records, public_keys, current_hash, revoked_at_map)
+
+    # Annotate with human-readable actor name so the frontend can display it
+    if not result.get("valid") and "actor_id" in result:
+        result["actor_name"] = actor_names.get(result["actor_id"], result["actor_id"])
+
+    # On success, include the ordered list of unique actors for display
+    if result.get("valid"):
+        seen, unique_actors = set(), []
+        for rec in records:
+            if rec["actor_id"] not in seen:
+                seen.add(rec["actor_id"])
+                unique_actors.append({
+                    "id": rec["actor_id"],
+                    "name": actor_names.get(rec["actor_id"], rec["actor_id"])
+                })
+        result["unique_actors"] = unique_actors
+
+>>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
     return jsonify(result)
 
 
@@ -183,6 +222,45 @@ def file_history(file_id):
     return jsonify([dict(r) for r in rows])
 
 
+<<<<<<< HEAD
+=======
+@app.route("/api/files/<file_id>", methods=["GET"])
+def get_file_detail(file_id):
+    """Return metadata for a single registered file including hop count."""
+    conn = get_db()
+    f = conn.execute("SELECT * FROM files WHERE id=?", (file_id,)).fetchone()
+    if not f:
+        conn.close()
+        return jsonify({"error": "file not found"}), 404
+    hop_count = conn.execute(
+        "SELECT COUNT(*) as cnt FROM ledger_records WHERE file_id=?", (file_id,)
+    ).fetchone()["cnt"]
+    conn.close()
+    result = dict(f)
+    result["hop_count"] = hop_count
+    return jsonify(result)
+
+
+@app.route("/api/stats", methods=["GET"])
+def get_stats():
+    """Return system-wide statistics for the dashboard hero widget."""
+    conn = get_db()
+    total_files = conn.execute("SELECT COUNT(*) as cnt FROM files").fetchone()["cnt"]
+    total_records = conn.execute(
+        "SELECT COUNT(*) as cnt FROM ledger_records"
+    ).fetchone()["cnt"]
+    total_custodians = conn.execute(
+        "SELECT COUNT(*) as cnt FROM users WHERE revoked_at IS NULL"
+    ).fetchone()["cnt"]
+    conn.close()
+    return jsonify({
+        "total_files": total_files,
+        "total_records": total_records,
+        "total_custodians": total_custodians
+    })
+
+
+>>>>>>> 9100f9a (add security engine modules to security directory and update backend imports)
 @app.route("/api/files/<file_id>/ela", methods=["POST"])
 def ela_analysis(file_id):
     """POST a file to get the ELA heatmap as a PNG image.
