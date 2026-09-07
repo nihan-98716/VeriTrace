@@ -143,22 +143,30 @@ function setupDropZone(zoneId, inputId, filenameId, onFile) {
 }
 
 function clearVerifyPanels() {
-  ["verdict-wrap", "hash-compare", "verify-chain-panel", "ela-wrap", "semantic-wrap", "freq-wrap"].forEach(id => {
+  ["verdict-wrap", "hash-compare", "verify-chain-panel", "ela-wrap", "semantic-wrap", "freq-wrap", "editorial-wrap"].forEach(id => {
     const el = $(id);
     if (el) el.classList.add("hidden");
   });
   if ($("verdict-subject")) $("verdict-subject").innerHTML = "";
   if ($("ela-file-meta")) $("ela-file-meta").textContent = "";
   if ($("freq-file-meta")) $("freq-file-meta").textContent = "";
+  if ($("editorial-file-meta")) $("editorial-file-meta").textContent = "";
   if ($("ela-img")) $("ela-img").src = "";
   if ($("fft-img")) $("fft-img").src = "";
   if ($("dct-img")) $("dct-img").src = "";
+  if ($("editorial-diff-img")) $("editorial-diff-img").src = "";
   if ($("fft-summary")) $("fft-summary").textContent = "";
   if ($("dct-summary")) $("dct-summary").textContent = "";
   if ($("semantic-summary")) $("semantic-summary").textContent = "";
   if ($("semantic-details")) $("semantic-details").innerHTML = "";
+  if ($("editorial-summary-text")) $("editorial-summary-text").innerHTML = "";
   if ($("verdict-badge")) $("verdict-badge").textContent = "";
   if ($("verdict-detail")) $("verdict-detail").innerHTML = "";
+  const canvas = $("editorial-canvas");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 setupDropZone("upload-dropzone", "upload-file", "upload-filename", async file => {
@@ -195,6 +203,16 @@ function updateTimelineActionTypeUI() {
   const dropzone = $("tl-dropzone");
   const notice = $("tl-transfer-notice");
   const prompt = $("tl-dropzone-prompt");
+  const editPanel = $("tl-editorial-panel");
+
+  if (editPanel) {
+    if (type === "EDITORIAL_TRANSFORM") {
+      editPanel.classList.remove("hidden");
+    } else {
+      editPanel.classList.add("hidden");
+    }
+  }
+
   if (type === "TRANSFER") {
     if (dropzone) dropzone.classList.add("hidden");
     if (notice) notice.classList.remove("hidden");
@@ -204,6 +222,10 @@ function updateTimelineActionTypeUI() {
     if (dropzone) dropzone.classList.remove("hidden");
     if (notice) notice.classList.add("hidden");
     if (prompt) prompt.textContent = "Drop new / updated file version here (required for MODIFY)";
+  } else if (type === "EDITORIAL_TRANSFORM") {
+    if (dropzone) dropzone.classList.remove("hidden");
+    if (notice) notice.classList.add("hidden");
+    if (prompt) prompt.textContent = "Drop cropped / compressed newsroom image here (required for Editorial Transform)";
   } else if (type === "REDACT") {
     if (dropzone) dropzone.classList.remove("hidden");
     if (notice) notice.classList.add("hidden");
@@ -597,6 +619,13 @@ async function loadHistory(fileId) {
               <span class="hop-field-label">Transformation</span>
               <span class="hop-field-val" style="color:var(--vt-yellow)">${h.declared_transformation}</span>
             </div>` : ""}
+            ${(h.metadata && h.metadata.editorial_manifest) ? `
+            <div class="hop-field">
+              <span class="hop-field-label">Editorial Manifest</span>
+              <span class="hop-field-val" style="color:var(--vt-cyan)">
+                ✂️ Authorized Newsroom Transformation (Version ${h.metadata.editorial_manifest.version || "1.0"})
+              </span>
+            </div>` : ""}
             ${(h.tsa_certified_ist || h.tsa_certified_utc) ? `
             <div class="hop-field">
               <span class="hop-field-label">RFC 3161 TSA</span>
@@ -638,8 +667,8 @@ $("btn-action").addEventListener("click", async () => {
     showResult("action-result", "File ID and custodian are both required.", true);
     return;
   }
-  if (actionType === "MODIFY" && !file) {
-    showResult("action-result", "MODIFY requires uploading the new file version.", true);
+  if ((actionType === "MODIFY" || actionType === "EDITORIAL_TRANSFORM") && !file) {
+    showResult("action-result", `${actionType} requires uploading the transformed file version.`, true);
     return;
   }
   if (actionType === "REDACT" && !file) {
@@ -650,8 +679,45 @@ $("btn-action").addEventListener("click", async () => {
   setLoading("btn-action", true);
   const fd = new FormData();
   fd.append("actor_id",   actorId);
-  fd.append("action_type", actionType);
-  if (declared) fd.append("declared_transformation", declared);
+
+  if (actionType === "EDITORIAL_TRANSFORM") {
+    fd.append("action_type", "MODIFY");
+    const cx = parseInt($("manifest-crop-x") ? $("manifest-crop-x").value : "", 10);
+    const cy = parseInt($("manifest-crop-y") ? $("manifest-crop-y").value : "", 10);
+    const cw = parseInt($("manifest-crop-w") ? $("manifest-crop-w").value : "", 10);
+    const ch = parseInt($("manifest-crop-h") ? $("manifest-crop-h").value : "", 10);
+    const qual = parseInt($("manifest-quality") ? $("manifest-quality").value : "", 10) || 80;
+    const redStr = $("manifest-redaction-box") ? $("manifest-redaction-box").value.trim() : "";
+
+    const ops = [];
+    if (!isNaN(cx) && !isNaN(cy) && !isNaN(cw) && !isNaN(ch) && cw > 0 && ch > 0) {
+      ops.push({ type: "CROP", parameters: { x: cx, y: cy, width: cw, height: ch } });
+    }
+    if (redStr) {
+      const parts = redStr.split(",").map(s => s.trim());
+      if (parts.length >= 4) {
+        ops.push({
+          type: "REDACTION_BOX",
+          parameters: {
+            x: parseInt(parts[0], 10),
+            y: parseInt(parts[1], 10),
+            width: parseInt(parts[2], 10),
+            height: parseInt(parts[3], 10),
+            reason: parts[4] || "Declared Redaction"
+          }
+        });
+      }
+    }
+    ops.push({ type: "RECOMPRESSION", parameters: { format: "JPEG", target_quality: qual } });
+
+    const manifest = { version: "1.0", operations: ops };
+    fd.append("editorial_manifest", JSON.stringify(manifest));
+    fd.append("declared_transformation", declared || "Newsroom Editorial Transform (Crop/Redact/Compress)");
+  } else {
+    fd.append("action_type", actionType);
+    if (declared) fd.append("declared_transformation", declared);
+  }
+
   // Never attach file for TRANSFER: TRANSFER preserves the existing asset content
   if (actionType !== "TRANSFER" && file) fd.append("file", file);
 
@@ -665,6 +731,11 @@ $("btn-action").addEventListener("click", async () => {
     if ($("tl-file")) $("tl-file").value = "";
     if ($("tl-filename")) $("tl-filename").textContent = "";
     if ($("tl-transform")) $("tl-transform").value = "";
+    if ($("manifest-crop-x")) $("manifest-crop-x").value = "";
+    if ($("manifest-crop-y")) $("manifest-crop-y").value = "";
+    if ($("manifest-crop-w")) $("manifest-crop-w").value = "";
+    if ($("manifest-crop-h")) $("manifest-crop-h").value = "";
+    if ($("manifest-redaction-box")) $("manifest-redaction-box").value = "";
     updateTimelineActionTypeUI();
 
     loadHistory(fileId);
@@ -740,8 +811,12 @@ function renderVerdict(result) {
 
   if ($("verdict-subject")) {
     const vName = result.verified_filename || "current asset";
-    const vHash = result.current_hash ? `${result.current_hash.slice(0, 10)}…${result.current_hash.slice(-6)}` : "";
-    $("verdict-subject").innerHTML = `📁 <strong>Target Evaluated:</strong> <span style="color:#fff">${escHtml(vName)}</span> &nbsp;·&nbsp; <strong>SHA-256:</strong> <code>${vHash}</code>`;
+    const vHash = result.target_hash || result.current_hash ? `${(result.target_hash || result.current_hash).slice(0, 10)}…${(result.target_hash || result.current_hash).slice(-6)}` : "";
+    let compHtml = "";
+    if (result.evaluated_latest_filename && result.evaluated_latest_filename !== vName) {
+      compHtml = ` &nbsp;·&nbsp; <span style="color:var(--vt-accent-cyan)">Compared vs Last System File: <code>${escHtml(result.evaluated_latest_filename)}</code></span>`;
+    }
+    $("verdict-subject").innerHTML = `📁 <strong>Target Evaluated:</strong> <span style="color:#fff">${escHtml(vName)}</span> &nbsp;·&nbsp; <strong>SHA-256:</strong> <code>${vHash}</code>${compHtml}`;
   }
 
   const isImg = Boolean(result.is_image);
@@ -754,29 +829,68 @@ function renderVerdict(result) {
 
   if (result.status === "VERIFIED") {
     const n = result.hops;
-    badge.textContent = `✅ VERIFIED — ${n} custody hop${n > 1 ? "s" : ""} confirmed`;
-    badge.classList.add("badge-verified");
-    const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
-    detail.textContent =
-      `The complete chain of custody is cryptographically intact. ` +
-      `Every signature is valid, every hash-link is unbroken, ` +
-      `and the verified file matches the last recorded ledger state.` +
-      (actors ? ` Chain: ${actors}` : "");
+    const isModified = Boolean(result.is_modified_from_genesis || (result.tampered_segments && result.tampered_segments.length > 0) || (result.forgery_percent && result.forgery_percent > 0));
+    if (isModified) {
+      const modHopsText = (result.modified_hops && result.modified_hops.length > 0)
+        ? ` · Altered at hop #${result.modified_hops.join(", #")}`
+        : " · Content Altered from Genesis";
+      badge.textContent = `⚠️ VERIFIED (CONTENT MODIFIED) — ${n} custody hop${n > 1 ? "s" : ""}${modHopsText}`;
+      badge.className = "badge";
+      badge.style.backgroundColor = "#d97706";
+      badge.style.color = "#ffffff";
+      const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
+      detail.innerHTML =
+        `<strong>Cryptographic Chain Intact · Content Modified from Genesis:</strong> ` +
+        `Every signature and hash-link is mathematically unbroken on the ledger, but content alterations were detected${result.modified_hops?.length ? ` at hop #${result.modified_hops.join(", #")}` : ""}. ` +
+        `Granular modifications, differences, and forensic scans are detailed below.` +
+        (actors ? `<br/><strong>Chain Custodians:</strong> ${escHtml(actors)}` : "");
+    } else {
+      badge.textContent = `✅ VERIFIED (UNMODIFIED) — ${n} custody hop${n > 1 ? "s" : ""} confirmed`;
+      badge.classList.add("badge-verified");
+      badge.style.backgroundColor = "";
+      badge.style.color = "";
+      const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
+      detail.textContent =
+        `The complete chain of custody is cryptographically intact. ` +
+        `Every signature is valid, every hash-link is unbroken, ` +
+        `and the asset matches the Genesis original.` +
+        (actors ? ` Chain: ${actors}` : "");
+    }
 
   } else if (result.status === "VERIFIED_REDACTED") {
     const n = result.hops;
     badge.textContent = `🛡️ VERIFIED (AUTHENTIC REDACTION) — ${n} hop${n > 1 ? "s" : ""} confirmed`;
     badge.classList.add("badge-verified");
     badge.style.backgroundColor = "#2563eb";
+    badge.style.color = "#ffffff";
     const redactedInfo = result.redacted_segments?.length ? ` Redacted sections: ${result.redacted_segments.join(", ")}.` : "";
     detail.innerHTML =
       `<strong>Zero-Knowledge Redaction Confirmed:</strong> ${result.message || "Authentic redaction verified."}` +
       redactedInfo + ` All unredacted text matches the original certified Merkle root.`;
 
+  } else if (result.status === "VERIFIED_EDITORIAL_TRANSFORM") {
+    const n = result.hops;
+    badge.textContent = `🛡️ VERIFIED (AUTHORIZED EDITORIAL TRANSFORMATION) — ${n} hop${n > 1 ? "s" : ""} confirmed`;
+    badge.className = "badge badge-editorial";
+    badge.style.backgroundColor = "";
+    badge.style.color = "";
+    const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
+    detail.innerHTML =
+      `<strong>Authorized Newsroom Modification Confirmed:</strong> ` +
+      `The candidate asset is authenticated as mathematically descended from the certified Genesis original. ` +
+      `Editorial adjustments (crop, re-compression, declared masking) are verified within allowable tolerances.` +
+      (actors ? `<br/><strong>Chain:</strong> ${escHtml(actors)}` : "");
+
   } else if (result.status === "TAMPERED") {
     const hop    = (result.broken_at ?? 0) + 1;
     const actor  = result.actor_name || result.actor_id || "unknown";
-    if (result.tamper_type === "EXTERNAL_MODIFICATION") {
+    if (result.tamper_type === "CONTENT_FORGERY_DETECTED") {
+      const pct = result.forgery_percent !== undefined ? result.forgery_percent : ((result.forgery_ratio || 0) * 100).toFixed(1);
+      badge.textContent = `🚨 TAMPERED — Content Forgery Detected (${pct}% Altered Area ≥ 15% Red-Line)`;
+    } else if (result.tamper_type === "UNAUTHORIZED_SEMANTIC_ALTERATION") {
+      const pct = result.forgery_percent !== undefined ? result.forgery_percent : ((result.forgery_ratio || 0) * 100).toFixed(1);
+      badge.textContent = `🚨 TAMPERED — Unauthorized Alteration (${pct}% Surface Delta)`;
+    } else if (result.tamper_type === "EXTERNAL_MODIFICATION") {
       badge.textContent = `🚨 TAMPERED — External file alteration (differs from final hop #${String(hop).padStart(2, "0")})`;
     } else if (result.tamper_type === "HISTORICAL_ROLLBACK") {
       badge.textContent = `🚨 TAMPERED — Rollback / Stale Version at hop #${String(hop).padStart(2, "0")}`;
@@ -809,30 +923,29 @@ function renderVerdict(result) {
   }
 
   // Semantic NLP Assessment Card (strictly for text documents with detected differences)
-  if (!isImg && result.semantic_assessment && $("semantic-wrap")) {
-    const sem = result.semantic_assessment;
+  const hasTextDiff = !isImg && (result.semantic_assessment || (result.tampered_segments && result.tampered_segments.length > 0) || result.is_modified_from_genesis);
+  if (hasTextDiff && $("semantic-wrap")) {
+    const sem = result.semantic_assessment || {};
     const sWrap = $("semantic-wrap");
     const sBadge = $("semantic-risk-badge");
     const sSummary = $("semantic-summary");
     const sDetails = $("semantic-details");
 
     sWrap.classList.remove("hidden");
-    sBadge.textContent = `${sem.overall_risk} RISK`;
-    if (sem.overall_risk === "CRITICAL") {
+    const risk = sem.overall_risk || (result.tampered_segments?.length ? "MODERATE" : "LOW");
+    sBadge.textContent = `${risk} RISK`;
+    if (risk === "CRITICAL") {
       sBadge.className = "badge badge-tampered";
       sWrap.style.borderLeftColor = "var(--vt-red)";
-    } else if (sem.overall_risk === "SUBSTANTIVE") {
+    } else if (risk === "SUBSTANTIVE" || risk === "MODERATE") {
       sBadge.className = "badge badge-unknown";
       sWrap.style.borderLeftColor = "#f59e0b";
-    } else if (sem.overall_risk === "MODERATE") {
-      sBadge.className = "badge badge-unknown";
-      sWrap.style.borderLeftColor = "#38bdf8";
     } else {
       sBadge.className = "badge badge-verified";
       sWrap.style.borderLeftColor = "#10b981";
     }
 
-    sSummary.textContent = sem.summary;
+    sSummary.textContent = sem.summary || (result.tampered_segments?.length ? `Detected alterations in: ${result.tampered_segments.join(", ")}` : "Text content modified from Genesis original.");
     if (sem.assessments && sem.assessments.length > 0) {
       sDetails.innerHTML = sem.assessments.map(a => {
         let badgeClass = "badge-verified";
@@ -863,9 +976,176 @@ function renderVerdict(result) {
           </div>
         `;
       }).join("");
+    } else if (result.tampered_segments && result.tampered_segments.length > 0) {
+      sDetails.innerHTML = `<ul style="margin:6px 0 0 16px;color:var(--vt-text);font-size:12px">${result.tampered_segments.map(s => `<li><strong style="color:var(--vt-yellow)">${escHtml(s)}</strong></li>`).join("")}</ul>`;
     } else {
-      sDetails.innerHTML = `<p class="muted" style="font-size:12px;margin:4px 0">No individual segment anomalies flagged.</p>`;
+      sDetails.innerHTML = `<p class="muted" style="font-size:12px;margin:4px 0">Content modified from original Genesis document.</p>`;
     }
+  }
+
+  // Image Forensics & Differential Analysis Card
+  const editWrap = $("editorial-wrap");
+  const hasImageDiff = isImg && (
+    result.status === "VERIFIED_EDITORIAL_TRANSFORM" ||
+    result.tamper_type === "CONTENT_FORGERY_DETECTED" ||
+    result.tamper_type === "UNAUTHORIZED_SEMANTIC_ALTERATION" ||
+    result.forgery_percent !== undefined ||
+    (result.forged_regions && result.forged_regions.length > 0) ||
+    result.is_modified_from_genesis ||
+    result.diff_heatmap_b64 ||
+    result.status === "TAMPERED"
+  );
+  if (editWrap && hasImageDiff) {
+    editWrap.classList.remove("hidden");
+    const forgeryPct = typeof result.forgery_percent === "number"
+      ? result.forgery_percent
+      : (result.forgery_ratio ? +(result.forgery_ratio * 100).toFixed(2) : 0);
+
+    const gaugeBar = $("forgery-gauge-bar");
+    const gaugeVal = $("forgery-gauge-val");
+    const statusPill = $("editorial-status-pill");
+    const summaryText = $("editorial-summary-text");
+    const metaEl = $("editorial-file-meta");
+
+    if (metaEl) {
+      metaEl.textContent = `Asset: ${result.verified_filename || "Target Image"} · SHA-256: ${result.current_hash ? result.current_hash.slice(0, 16) + "…" : "Evaluated"}`;
+    }
+
+    if (gaugeVal) {
+      gaugeVal.textContent = `${forgeryPct.toFixed(1)}%`;
+    }
+
+    if (gaugeBar) {
+      const barW = Math.min(100, Math.max(0, forgeryPct));
+      gaugeBar.style.width = `${barW}%`;
+      if (result.status === "TAMPERED" || forgeryPct >= 15.0) {
+        gaugeBar.style.backgroundColor = "var(--vt-red)";
+        if (gaugeVal) gaugeVal.style.color = "var(--vt-red)";
+        editWrap.style.borderLeftColor = "var(--vt-red)";
+        if (statusPill) {
+          statusPill.textContent = result.tamper_type === "CONTENT_FORGERY_DETECTED" ? "🚨 CONTENT FORGERY (≥ 15%)" : "🚨 TAMPERED / UNAUTHORIZED ALTERATION";
+          statusPill.className = "badge badge-tampered";
+          statusPill.style.backgroundColor = "";
+          statusPill.style.color = "";
+        }
+      } else if (result.status === "VERIFIED_EDITORIAL_TRANSFORM") {
+        gaugeBar.style.backgroundColor = "#10b981";
+        if (gaugeVal) gaugeVal.style.color = "#34d399";
+        editWrap.style.borderLeftColor = "var(--vt-cyan)";
+        if (statusPill) {
+          statusPill.textContent = "🛡️ AUTHORIZED EDITORIAL TRANSFORM";
+          statusPill.className = "badge badge-editorial";
+          statusPill.style.backgroundColor = "";
+          statusPill.style.color = "";
+        }
+      } else if (result.is_modified_from_genesis || forgeryPct > 0) {
+        gaugeBar.style.backgroundColor = "#f59e0b";
+        if (gaugeVal) gaugeVal.style.color = "#f59e0b";
+        editWrap.style.borderLeftColor = "#f59e0b";
+        if (statusPill) {
+          statusPill.textContent = `⚠️ IMAGE CONTENT MODIFIED (${forgeryPct.toFixed(1)}% Altered Area)`;
+          statusPill.className = "badge badge-unknown";
+          statusPill.style.backgroundColor = "#d97706";
+          statusPill.style.color = "#ffffff";
+        }
+      } else {
+        gaugeBar.style.backgroundColor = "#10b981";
+        if (gaugeVal) gaugeVal.style.color = "#34d399";
+        editWrap.style.borderLeftColor = "var(--vt-cyan)";
+        if (statusPill) {
+          statusPill.textContent = "✅ UNMODIFIED IMAGE";
+          statusPill.className = "badge badge-verified";
+          statusPill.style.backgroundColor = "";
+          statusPill.style.color = "";
+        }
+      }
+    }
+
+    if (summaryText) {
+      let cropInfo = "";
+      if (result.crop_coordinates || result.aligned_crop) {
+        const c = result.crop_coordinates || result.aligned_crop;
+        cropInfo = `<br/><strong>Crop Window Detected:</strong> X: ${c.x}px, Y: ${c.y}px, Width: ${c.width}px, Height: ${c.height}px (Confidence: ${((c.confidence || 1.0) * 100).toFixed(0)}%)`;
+      }
+      let regionInfo = "";
+      if (result.forged_regions && result.forged_regions.length > 0) {
+        regionInfo = `<br/><strong style="color:var(--vt-red)">Localized Altered Clusters:</strong> ${result.forged_regions.length} anomalous region(s) detected [Primary cluster: ${result.forged_regions[0].altered_pixels}px at (${result.forged_regions[0].x}, ${result.forged_regions[0].y})]`;
+      }
+      summaryText.innerHTML = `<strong>Forensic Assessment:</strong> ${escHtml(result.summary || result.reason || (result.is_modified_from_genesis ? "Image modifications detected between Genesis and latest system asset." : "Forensic evaluation completed."))}${cropInfo}${regionInfo}`;
+    }
+
+    // Difference Heatmap
+    const diffImg = $("editorial-diff-img");
+    if (diffImg) {
+      if (result.diff_heatmap_b64) {
+        diffImg.src = "data:image/png;base64," + result.diff_heatmap_b64;
+      } else {
+        const fileId = $("verify-file-id").value.trim();
+        diffImg.src = `${API}/files/${fileId}/editorial_diff?t=${Date.now()}`;
+      }
+    }
+
+    renderEditorialCanvas(result);
+  } else if (editWrap) {
+    editWrap.classList.add("hidden");
+  }
+}
+
+function renderEditorialCanvas(result) {
+  const canvas = $("editorial-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const diffImg = $("editorial-diff-img");
+  const uploadedFile = $("verify-file") && $("verify-file").files[0];
+
+  const sourceImg = new Image();
+  sourceImg.onload = () => {
+    canvas.width = sourceImg.naturalWidth || 400;
+    canvas.height = sourceImg.naturalHeight || 300;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
+
+    const scaleX = canvas.width / (sourceImg.naturalWidth || canvas.width);
+    const scaleY = canvas.height / (sourceImg.naturalHeight || canvas.height);
+
+    // Draw Cyan Crop Border
+    ctx.save();
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 4;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+    ctx.restore();
+
+    // Draw Red Forged Bounding Boxes
+    if (result.forged_regions && Array.isArray(result.forged_regions)) {
+      result.forged_regions.forEach(r => {
+        const rx = r.x * scaleX;
+        const ry = r.y * scaleY;
+        const rw = r.width * scaleX;
+        const rh = r.height * scaleY;
+
+        ctx.save();
+        ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(rx, ry, rw, rh);
+
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText(`FORGERY [${r.altered_pixels}px]`, rx + 4, Math.max(14, ry - 4));
+        ctx.restore();
+      });
+    }
+  };
+
+  if (uploadedFile) {
+    sourceImg.src = URL.createObjectURL(uploadedFile);
+  } else if (result.diff_heatmap_b64) {
+    sourceImg.src = "data:image/png;base64," + result.diff_heatmap_b64;
+  } else if (diffImg && diffImg.src) {
+    sourceImg.src = diffImg.src;
   }
 }
 
@@ -875,7 +1155,7 @@ async function loadVerifyChain(fileId, verifyResult) {
     if (!hops.length) return;
 
     const brokenAt  = verifyResult.broken_at ?? null;
-    const isVerified = verifyResult.status === "VERIFIED" || verifyResult.status === "VERIFIED_REDACTED";
+    const isVerified = verifyResult.status === "VERIFIED" || verifyResult.status === "VERIFIED_REDACTED" || verifyResult.status === "VERIFIED_EDITORIAL_TRANSFORM";
     const isTampered = verifyResult.status === "TAMPERED";
 
     $("verify-chain-panel").classList.remove("hidden");
@@ -883,24 +1163,29 @@ async function loadVerifyChain(fileId, verifyResult) {
       let rowClass = "vct-row";
       let statusHtml;
 
-      if (isVerified) {
-        statusHtml = `<span style="color:var(--vt-green)">✅ Valid in Ledger</span>`;
-      } else if (isTampered) {
-        if (brokenAt === null || i < brokenAt) {
-          statusHtml = `<span style="color:var(--vt-green)">✅ Valid in Ledger</span>`;
-        } else if (i === brokenAt) {
-          rowClass += " vct-broken";
-          if (verifyResult.tamper_type === "EXTERNAL_MODIFICATION") {
-            statusHtml = `<span style="color:var(--vt-yellow)">⚠ Modified Outside Chain</span>`;
-          } else {
-            statusHtml = `<span style="color:var(--vt-red)">🔴 BROKEN</span>`;
-          }
+      if (isTampered && brokenAt !== null && i === brokenAt) {
+        rowClass += " vct-broken";
+        if (verifyResult.tamper_type === "EXTERNAL_MODIFICATION") {
+          statusHtml = `<span style="color:var(--vt-yellow);font-weight:700">⚠ Modified Outside Chain</span>`;
         } else {
-          rowClass += " vct-after";
-          statusHtml = `<span style="color:var(--vt-muted)">⚪ —</span>`;
+          statusHtml = `<span style="color:var(--vt-red);font-weight:700">🔴 BROKEN / TAMPERED</span>`;
         }
+      } else if (isTampered && brokenAt !== null && i > brokenAt) {
+        rowClass += " vct-after";
+        statusHtml = `<span style="color:var(--vt-muted)">⚪ —</span>`;
       } else {
-        statusHtml = `<span style="color:var(--vt-muted)">?</span>`;
+        // Authenticated hop on ledger
+        if (h.action_type === "CREATE") {
+          statusHtml = `<span style="color:var(--vt-green)">✅ Genesis Original</span>`;
+        } else if (h.action_type === "MODIFY") {
+          statusHtml = `<span style="color:var(--vt-yellow);font-weight:600">⚠️ Content Modified</span>`;
+        } else if (h.action_type === "REDACT") {
+          statusHtml = `<span style="color:#60a5fa;font-weight:600">🛡️ Authentic Redaction</span>`;
+        } else if (h.action_type === "TRANSFER") {
+          statusHtml = `<span style="color:var(--vt-green)">✅ Custody Transferred</span>`;
+        } else {
+          statusHtml = `<span style="color:var(--vt-green)">✅ Valid in Ledger</span>`;
+        }
       }
 
       const isBreak = isTampered && i === brokenAt;

@@ -210,11 +210,51 @@ def _canonical_bytes(record: dict) -> bytes:
     return json.dumps(signable, sort_keys=True).encode()
 
 
+def validate_editorial_manifest(manifest: dict) -> tuple:
+    """
+    Validates the structure of an editorial_manifest for FC-03-B.
+    Accepts operations array format or structured dict format.
+    Returns (is_valid: bool, error_msg: Optional[str]).
+    """
+    if not isinstance(manifest, dict):
+        return False, "editorial_manifest must be a dictionary"
+    
+    if "operations" in manifest:
+        if not isinstance(manifest["operations"], list):
+            return False, "editorial_manifest 'operations' must be a list"
+        for i, op in enumerate(manifest["operations"]):
+            if not isinstance(op, dict):
+                return False, f"Operation #{i} must be a dictionary"
+            if "type" not in op:
+                return False, f"Operation #{i} missing 'type'"
+            if "parameters" in op and not isinstance(op["parameters"], dict):
+                return False, f"Operation #{i} 'parameters' must be a dictionary"
+    elif "crop" in manifest or "redacted_boxes" in manifest:
+        if "crop" in manifest and not isinstance(manifest["crop"], dict):
+            return False, "'crop' must be a dictionary"
+        if "redacted_boxes" in manifest and not isinstance(manifest["redacted_boxes"], list):
+            return False, "'redacted_boxes' must be a list"
+    else:
+        return False, "editorial_manifest must contain 'operations' list or 'crop'/'redacted_boxes'"
+
+    return True, None
+
+
 def create_record(file_id, file_content_hash, prev_record_hash, action_type,
                    actor_id, private_key, metadata=None,
                    declared_transformation=None, file_bytes=None, filename=None,
-                   request_tsa=False):
+                   request_tsa=False, editorial_manifest=None):
     metadata = metadata or {}
+
+    # FC-03-B: Validate and attach editorial_manifest if supplied
+    manifest = editorial_manifest or metadata.get("editorial_manifest")
+    if manifest:
+        is_valid, err_msg = validate_editorial_manifest(manifest)
+        if not is_valid:
+            raise ValueError(f"Invalid editorial_manifest: {err_msg}")
+        metadata["editorial_manifest"] = manifest
+        if not declared_transformation:
+            declared_transformation = "Authorized Editorial Transformation (Crop/Redact/Recompress)"
     
     # Granular Merkle segment hashing and text preservation if file bytes are provided
     if file_bytes and filename:
@@ -405,7 +445,20 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
                         "status": "VERIFIED_REDACTED",
                         "hops": len(records),
                         "message": redact_res.get("message"),
-                        "redacted_segments": redact_res.get("redacted_segments")
+                        "redacted_segments": redact_res.get("redacted_segments"),
+                        "is_modified_from_genesis": True,
+                        "modified_hops": [i + 1 for i, r in enumerate(records) if r.get("action_type") in ("MODIFY", "REDACT")]
+                    }
+                else:
+                    return {
+                        "valid": False,
+                        "broken_at": len(records) - 1,
+                        "actor_id": latest["actor_id"],
+                        "tamper_type": "UNAUTHORIZED_REDACTION_MODIFICATION",
+                        "reason": redact_res.get("reason", "Unredacted content altered or redaction proof invalid"),
+                        "expected_hash": latest["file_content_hash"],
+                        "current_hash": current_file_hash,
+                        "status": "TAMPERED"
                     }
         except Exception:
             pass
@@ -424,8 +477,53 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
             current_file_bytes.startswith(b"GIF8")):
             is_img = True
 
+    # FC-03-B: Check for declared editorial manifest across records
+    editorial_manifest = None
+    for r in reversed(records):
+        if isinstance(r.get("metadata"), dict) and r["metadata"].get("editorial_manifest"):
+            editorial_manifest = r["metadata"]["editorial_manifest"]
+            break
+        if r.get("editorial_manifest"):
+            editorial_manifest = r["editorial_manifest"]
+            break
+
     # Pillar 3: current file must match the last recorded content state
     if latest["file_content_hash"] != current_file_hash:
+        # Check image forensic alterations between genesis original and candidate file
+        img_tamper_diff = None
+        if is_img and current_file_bytes and original_file_bytes:
+            try:
+                try:
+                    from editorial_verifier import evaluate_editorial_transformation
+                except ImportError:
+                    from security.editorial_verifier import evaluate_editorial_transformation
+
+                img_tamper_diff = evaluate_editorial_transformation(original_file_bytes, current_file_bytes, editorial_manifest)
+                if editorial_manifest is not None and img_tamper_diff.get("is_content_forgery"):
+                    broken_hop_idx = len(records) - 1
+                    return {
+                        "valid": False,
+                        "broken_at": broken_hop_idx,
+                        "actor_id": latest["actor_id"],
+                        "tamper_type": "CONTENT_FORGERY_DETECTED",
+                        "reason": (
+                            f"Malicious content forgery detected: {img_tamper_diff['forgery_percent']}% altered surface area "
+                            f"exceeds 15% editorial tolerance threshold"
+                        ),
+                        "forgery_ratio": img_tamper_diff["forgery_ratio"],
+                        "forgery_percent": img_tamper_diff["forgery_percent"],
+                        "forged_regions": img_tamper_diff["forged_regions"],
+                        "aligned_crop": img_tamper_diff["aligned_crop"],
+                        "crop_coordinates": img_tamper_diff["aligned_crop"],
+                        "ssim_approx": img_tamper_diff["ssim_approx"],
+                        "diff_heatmap_b64": base64.b64encode(img_tamper_diff["diff_heatmap_png"]).decode("ascii") if img_tamper_diff.get("diff_heatmap_png") else None,
+                        "expected_hash": latest["file_content_hash"],
+                        "current_hash": current_file_hash,
+                        "status": "TAMPERED"
+                    }
+            except Exception:
+                pass
+
         # Find if the submitted file matches an EARLIER hop (e.g. stale version, rollback attack)
         matched_earlier_hop = None
         for idx in range(len(records) - 2, -1, -1):
@@ -483,7 +581,7 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
         if tampered_segments:
             reason_msg += f" (Altered parts: {', '.join(tampered_segments)})"
 
-        return {
+        resp_tampered = {
             "valid": False,
             "broken_at": broken_hop_idx,
             "actor_id": broken_actor,
@@ -495,13 +593,143 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
             "current_hash": current_file_hash,
             "status": "TAMPERED"
         }
+        if is_img and img_tamper_diff:
+            resp_tampered["forgery_ratio"] = img_tamper_diff.get("forgery_ratio", 0.0)
+            resp_tampered["forgery_percent"] = img_tamper_diff.get("forgery_percent", 0.0)
+            resp_tampered["forged_regions"] = img_tamper_diff.get("forged_regions", [])
+            resp_tampered["aligned_crop"] = img_tamper_diff.get("aligned_crop")
+            resp_tampered["crop_coordinates"] = img_tamper_diff.get("aligned_crop")
+            if img_tamper_diff.get("diff_heatmap_png"):
+                resp_tampered["diff_heatmap_b64"] = base64.b64encode(img_tamper_diff["diff_heatmap_png"]).decode("ascii")
+        return resp_tampered
 
-    # For VERIFIED chains, assess semantic impact if document was modified from genesis original
+    # FC-03-B: Evaluate editorial transformation vs Genesis original (strictly requires declared manifest)
+    if is_img and current_file_bytes and original_file_bytes and (editorial_manifest is not None):
+        try:
+            try:
+                from editorial_verifier import evaluate_editorial_transformation
+            except ImportError:
+                from security.editorial_verifier import evaluate_editorial_transformation
+
+            edit_res = evaluate_editorial_transformation(original_file_bytes, current_file_bytes, editorial_manifest)
+
+            # Check if malicious content forgery >= 15%
+            if edit_res.get("is_content_forgery"):
+                return {
+                    "valid": False,
+                    "broken_at": len(records) - 1,
+                    "actor_id": latest["actor_id"],
+                    "tamper_type": "CONTENT_FORGERY_DETECTED",
+                    "reason": (
+                        f"Malicious content forgery detected: {edit_res['forgery_percent']}% altered surface area "
+                        f"exceeds 15% editorial tolerance threshold at hop #{len(records)}"
+                    ),
+                    "forgery_ratio": edit_res["forgery_ratio"],
+                    "forgery_percent": edit_res["forgery_percent"],
+                    "forged_regions": edit_res["forged_regions"],
+                    "aligned_crop": edit_res["aligned_crop"],
+                    "crop_coordinates": edit_res["aligned_crop"],
+                    "ssim_approx": edit_res["ssim_approx"],
+                    "diff_heatmap_b64": base64.b64encode(edit_res["diff_heatmap_png"]).decode("ascii") if edit_res.get("diff_heatmap_png") else None,
+                    "expected_hash": latest["file_content_hash"],
+                    "current_hash": current_file_hash,
+                    "status": "TAMPERED"
+                }
+
+            # Check if subtle unauthorized alteration (5% <= ratio < 15%)
+            if editorial_manifest and (0.05 <= edit_res.get("forgery_ratio", 0.0) < 0.15):
+                return {
+                    "valid": False,
+                    "broken_at": len(records) - 1,
+                    "actor_id": latest["actor_id"],
+                    "tamper_type": "UNAUTHORIZED_SEMANTIC_ALTERATION",
+                    "reason": (
+                        f"Unauthorized semantic alteration detected: {edit_res['forgery_percent']}% altered surface area "
+                        f"not accounted for in declared editorial manifest"
+                    ),
+                    "forgery_ratio": edit_res["forgery_ratio"],
+                    "forgery_percent": edit_res["forgery_percent"],
+                    "forged_regions": edit_res["forged_regions"],
+                    "aligned_crop": edit_res["aligned_crop"],
+                    "crop_coordinates": edit_res["aligned_crop"],
+                    "diff_heatmap_b64": base64.b64encode(edit_res["diff_heatmap_png"]).decode("ascii") if edit_res.get("diff_heatmap_png") else None,
+                    "expected_hash": latest["file_content_hash"],
+                    "current_hash": current_file_hash,
+                    "status": "TAMPERED"
+                }
+
+            # If verified as legitimate transformation (< 5% alteration)
+            if edit_res.get("is_legitimate_transform"):
+                return {
+                    "valid": True,
+                    "status": "VERIFIED_EDITORIAL_TRANSFORM",
+                    "hops": len(records),
+                    "is_modified_from_genesis": True,
+                    "modified_hops": [i + 1 for i, r in enumerate(records) if r.get("action_type") in ("MODIFY", "REDACT")],
+                    "forgery_ratio": edit_res["forgery_ratio"],
+                    "forgery_percent": edit_res["forgery_percent"],
+                    "aligned_crop": edit_res["aligned_crop"],
+                    "crop_coordinates": edit_res["aligned_crop"],
+                    "declared_redactions_applied": edit_res.get("declared_redactions_applied", 0),
+                    "summary": edit_res["summary"],
+                    "diff_heatmap_b64": base64.b64encode(edit_res["diff_heatmap_png"]).decode("ascii") if edit_res.get("diff_heatmap_png") else None
+                }
+        except Exception:
+            pass
+
+    # Detect modifications from Genesis original
+    is_modified_from_genesis = bool(
+        records and (
+            current_file_hash != records[0]["file_content_hash"] or
+            any(r.get("action_type") in ("MODIFY", "REDACT") for r in records) or
+            (current_file_bytes and original_file_bytes and current_file_bytes != original_file_bytes)
+        )
+    )
+    modified_hops = [i + 1 for i, r in enumerate(records) if r.get("action_type") in ("MODIFY", "REDACT")]
+
+    # For VERIFIED chains, assess semantic impact if text document was modified from genesis original
     sem_eval = None
+    tampered_segs = []
     if not is_img and current_file_bytes and original_file_bytes and (current_file_bytes != original_file_bytes):
+        base_segments = meta.get("segments") or records[0].get("metadata", {}).get("segments")
+        if not base_segments and original_file_bytes and filename:
+            try:
+                from document_forensics import compute_document_merkle_tree
+                base_segments = compute_document_merkle_tree(original_file_bytes, filename).get("segments")
+            except Exception:
+                pass
+        if isinstance(base_segments, dict) and filename:
+            try:
+                from document_forensics import analyze_tampered_segments
+                tampered_segs = analyze_tampered_segments(base_segments, current_file_bytes, filename)
+            except Exception:
+                pass
         try:
             from semantic_assessor import assess_document_tampering
             sem_eval = assess_document_tampering(original_file_bytes, current_file_bytes, filename)
+        except Exception:
+            pass
+
+    # For VERIFIED chains, compute differential image forensics if image was modified from genesis original
+    img_forgery_ratio = None
+    img_forgery_percent = None
+    img_forged_regions = []
+    img_aligned_crop = None
+    img_diff_b64 = None
+    if is_img and current_file_bytes and original_file_bytes and (current_file_bytes != original_file_bytes):
+        try:
+            try:
+                from editorial_verifier import evaluate_editorial_transformation
+            except ImportError:
+                from security.editorial_verifier import evaluate_editorial_transformation
+
+            img_eval = evaluate_editorial_transformation(original_file_bytes, current_file_bytes, editorial_manifest)
+            img_forgery_ratio = img_eval.get("forgery_ratio", 0.0)
+            img_forgery_percent = img_eval.get("forgery_percent", 0.0)
+            img_forged_regions = img_eval.get("forged_regions", [])
+            img_aligned_crop = img_eval.get("aligned_crop")
+            if img_eval.get("diff_heatmap_png"):
+                img_diff_b64 = base64.b64encode(img_eval["diff_heatmap_png"]).decode("ascii")
         except Exception:
             pass
 
@@ -509,5 +737,14 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
         "valid": True,
         "status": "VERIFIED",
         "hops": len(records),
-        "semantic_assessment": sem_eval
+        "is_modified_from_genesis": is_modified_from_genesis,
+        "modified_hops": modified_hops,
+        "tampered_segments": tampered_segs,
+        "semantic_assessment": sem_eval,
+        "forgery_ratio": img_forgery_ratio,
+        "forgery_percent": img_forgery_percent,
+        "forged_regions": img_forged_regions,
+        "aligned_crop": img_aligned_crop,
+        "crop_coordinates": img_aligned_crop,
+        "diff_heatmap_b64": img_diff_b64
     }

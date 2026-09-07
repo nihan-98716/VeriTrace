@@ -238,6 +238,7 @@
             <select id="tl-action-type">
               <option value="TRANSFER">TRANSFER (custody change, same content)</option>
               <option value="MODIFY">MODIFY (new file version)</option>
+              <option value="EDITORIAL_TRANSFORM">EDITORIAL TRANSFORM (Newsroom Crop / Redaction / Compress)</option>
               <option value="REDACT">REDACT (Zero-Knowledge Verifiable Redaction)</option>
             </select>
           </div>
@@ -245,6 +246,42 @@
             <label for="tl-transform">Declared Transformation (optional)</label>
             <input type="text" id="tl-transform" placeholder="e.g. web compression, watermark added" />
           </div>
+        </div>
+
+        <!-- FC-03-B: Editorial Transform Builder -->
+        <div id="tl-editorial-panel" class="hidden" style="margin:8px 0;padding:12px;background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.25);border-radius:6px">
+          <div style="font-size:12px;font-weight:600;color:var(--vt-cyan);margin-bottom:8px">✂️ Newsroom Editorial Manifest Builder</div>
+          <div class="form-row" style="gap:8px">
+            <div class="form-group" style="flex:1">
+              <label style="font-size:11px">Crop X (px)</label>
+              <input type="number" id="manifest-crop-x" placeholder="auto" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label style="font-size:11px">Crop Y (px)</label>
+              <input type="number" id="manifest-crop-y" placeholder="auto" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label style="font-size:11px">Crop Width</label>
+              <input type="number" id="manifest-crop-w" placeholder="auto" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label style="font-size:11px">Crop Height</label>
+              <input type="number" id="manifest-crop-h" placeholder="auto" style="font-size:12px" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label style="font-size:11px">Target Quality</label>
+              <input type="number" id="manifest-quality" value="80" min="1" max="100" style="font-size:12px" />
+            </div>
+          </div>
+          <div class="form-row" style="gap:8px;margin-top:6px">
+            <div class="form-group" style="flex:2">
+              <label style="font-size:11px">Redaction Box (optional: x, y, width, height, reason)</label>
+              <input type="text" id="manifest-redaction-box" placeholder="e.g. 20, 20, 40, 25, Privacy Face Mask" style="font-size:12px" />
+            </div>
+          </div>
+          <p style="font-size:11px;color:var(--vt-muted);margin:4px 0 0 0">
+            ℹ️ Leaving crop coordinates blank activates automatic normalized cross-correlation subwindow discovery.
+          </p>
         </div>
         <div id="tl-transfer-notice" class="info-notice" style="padding:10px 14px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:6px;font-size:12px;color:#93c5fd;margin:8px 0">
           🔄 <strong>Custody TRANSFER:</strong> Reassigns custodianship while cryptographically preserving the existing verified file content. No file re-upload required.
@@ -342,6 +379,56 @@
       <div id="verify-chain-panel" class="verify-chain-panel hidden">
         <div class="verify-chain-title">Chain Verification Report</div>
         <div id="verify-chain-table" class="verify-chain-table"></div>
+      </div>
+
+      <!-- FC-03-B: Editorial Transformation & Content Forgery Discrimination Panel -->
+      <div id="editorial-wrap" class="card hidden" style="margin-top:24px;border-left:4px solid var(--vt-cyan)">
+        <div class="ela-header" style="flex-wrap:wrap;gap:8px">
+          <div>
+            <span class="ela-title">🛡️ Editorial Transformation & Content Forgery Discrimination</span>
+            <div id="editorial-file-meta" style="font-size:11px;color:var(--vt-cyan);margin-top:2px;font-family:var(--vt-font-mono)"></div>
+          </div>
+          <span id="editorial-status-pill" class="badge" style="font-size:11px;padding:3px 10px"></span>
+        </div>
+
+        <!-- Forgery Surface Area Meter / Gauge -->
+        <div style="margin: 14px 0 16px 0; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <span style="font-size:12px; font-weight:600; color:var(--vt-text)">Altered Canvas Surface Area (Semantic Forgery Ratio)</span>
+            <span id="forgery-gauge-val" style="font-size:12px; font-weight:700; font-family:var(--vt-font-mono)">0.0%</span>
+          </div>
+          <div style="position:relative; height:12px; background:rgba(255,255,255,0.08); border-radius:6px; overflow:hidden">
+            <div id="forgery-gauge-bar" style="height:100%; width:0%; transition:width 0.6s cubic-bezier(0.16, 1, 0.3, 1)"></div>
+            <!-- 15% threshold marker -->
+            <div style="position:absolute; left:15%; top:0; bottom:0; width:2px; background:var(--vt-red); z-index:2" title="15% Content Forgery Red-Line"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--vt-muted); margin-top:4px">
+            <span>0% (Exact Match)</span>
+            <span style="color:var(--vt-red);font-weight:600">▲ 15% Forgery Red-Line</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <div id="editorial-summary-text" style="font-size:13px;color:var(--vt-text);line-height:1.5;margin-bottom:14px"></div>
+
+        <!-- Visual Canvas & Heatmap Overlay Section -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-cyan)">Candidate Image & Localization Overlay</div>
+            <div style="position:relative;display:inline-block;max-width:100%">
+              <canvas id="editorial-canvas" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1);display:block"></canvas>
+            </div>
+            <div id="editorial-canvas-legend" style="font-size:11px;color:var(--vt-muted);margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
+              <span style="color:#38bdf8">■ Cyan: Aligned Genesis Crop</span>
+              <span style="color:#ef4444">■ Red: Localized Forgery Splice</span>
+            </div>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-purple)">Forensic Difference Heatmap</div>
+            <img id="editorial-diff-img" src="" alt="Forensic Difference Heatmap" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1);display:block" />
+            <div style="font-size:11px;color:var(--vt-muted);margin-top:6px">Pixel delta heatmap normalized against JPEG compression tolerance</div>
+          </div>
+        </div>
       </div>
 
       <!-- ELA heatmap -->

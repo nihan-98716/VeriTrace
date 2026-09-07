@@ -19,7 +19,8 @@ from crypto_engine import (
     generate_keypair, pubkey_to_str, pubkey_from_str,
     privkey_to_str, privkey_from_str,
     encrypt_private_key_envelope, decrypt_private_key_envelope,
-    hash_file_bytes, create_record, verify_chain
+    hash_file_bytes, create_record, verify_chain,
+    validate_editorial_manifest
 )
 from ela import compute_ela
 
@@ -192,6 +193,31 @@ def file_action(file_id):
     action_type = request.form.get("action_type")
     declared_transformation = request.form.get("declared_transformation")
     uploaded = request.files.get("file")
+    manifest_raw = request.form.get("editorial_manifest")
+
+    if request.is_json:
+        body = request.get_json() or {}
+        actor_id = actor_id or body.get("actor_id")
+        action_type = action_type or body.get("action_type")
+        declared_transformation = declared_transformation or body.get("declared_transformation")
+        manifest_raw = manifest_raw or body.get("editorial_manifest")
+
+    editorial_manifest = None
+    if manifest_raw:
+        if isinstance(manifest_raw, str):
+            try:
+                editorial_manifest = json.loads(manifest_raw)
+            except json.JSONDecodeError:
+                return jsonify({"error": "editorial_manifest must be valid JSON"}), 400
+        elif isinstance(manifest_raw, dict):
+            editorial_manifest = manifest_raw
+
+    if editorial_manifest:
+        is_valid, err_msg = validate_editorial_manifest(editorial_manifest)
+        if not is_valid:
+            return jsonify({"error": f"Invalid editorial_manifest: {err_msg}"}), 400
+        if not declared_transformation:
+            declared_transformation = "Authorized Editorial Transformation (Crop/Redact/Recompress)"
 
     if not actor_id or not action_type:
         return jsonify({"error": "actor_id and action_type are required"}), 400
@@ -212,6 +238,9 @@ def file_action(file_id):
         return jsonify({"error": "file not found"}), 404
 
     action_meta = {}
+    if editorial_manifest:
+        action_meta["editorial_manifest"] = editorial_manifest
+
     if action_type == "TRANSFER":
         # TRANSFER: custody changes hands, but file content MUST remain identical
         if uploaded:
@@ -241,7 +270,7 @@ def file_action(file_id):
         saved_path = os.path.join(UPLOAD_DIR, f"{file_id}_latest_{uploaded.filename}")
         with open(saved_path, "wb") as f:
             f.write(file_bytes)
-        action_meta = {"filename": uploaded.filename}
+        action_meta["filename"] = uploaded.filename
 
     record = create_record(
         file_id=file_id, file_content_hash=content_hash,
@@ -249,7 +278,10 @@ def file_action(file_id):
         actor_id=actor_id, private_key=priv,
         declared_transformation=declared_transformation,
         metadata=action_meta,
-        request_tsa=True
+        request_tsa=True,
+        editorial_manifest=editorial_manifest,
+        file_bytes=file_bytes if action_type == "MODIFY" else None,
+        filename=uploaded.filename if (action_type == "MODIFY" and uploaded) else None
     )
     _insert_record(conn, record)
     conn.commit()
@@ -334,31 +366,24 @@ def _resolve_file_bytes(file_id: str, uploaded) -> tuple:
 @app.route("/api/files/<file_id>/verify", methods=["POST"])
 def verify_file(file_id):
     """POST a file to test tamper, OR omit file to automatically verify."""
+    # 1. Resolve original genesis file (Target asset evaluated)
+    orig_bytes, orig_filename = _resolve_original_file(file_id)
+
+    # 2. Resolve comparison file (uploaded candidate or last file in the system on disk)
     uploaded = request.files.get("file")
     if uploaded:
         file_bytes = uploaded.read()
         filename = uploaded.filename
     else:
-        conn = get_db()
-        last_rec = conn.execute(
-            "SELECT action_type FROM ledger_records WHERE file_id=? ORDER BY timestamp DESC LIMIT 1",
-            (file_id,)
-        ).fetchone()
-        conn.close()
-
-        # If the file has been redacted, target the redacted file for ZK proof verification
-        if last_rec and last_rec["action_type"] == "REDACT":
-            file_bytes, filename = _resolve_file_bytes(file_id, None)
-        else:
-            # Default to original photo for chain verification
-            file_bytes, filename = _resolve_original_file(file_id)
-            if not file_bytes:
-                file_bytes, filename = _resolve_file_bytes(file_id, None)
+        file_bytes, filename = _resolve_file_bytes(file_id, None)
+        if not file_bytes:
+            file_bytes, filename = orig_bytes, orig_filename
 
     if file_bytes is None:
         return jsonify({"error": "No file uploaded and no registered file found for this ID"}), 400
 
     current_hash = hash_file_bytes(file_bytes)
+    orig_hash = hash_file_bytes(orig_bytes) if orig_bytes else current_hash
 
     conn = get_db()
     rows = conn.execute(
@@ -383,21 +408,64 @@ def verify_file(file_id):
                 rec["metadata"] = {}
         records.append(rec)
 
-    # Resolve original genesis file bytes for differential analysis
-    orig_bytes = _resolve_original_bytes(file_id)
-
     result = verify_chain(records, public_keys, current_hash, revoked_at_map,
                           current_file_bytes=file_bytes, filename=filename,
                           original_file_bytes=orig_bytes)
 
-    result["verified_filename"] = filename
+    # Target is the original file as requested
+    result["verified_filename"] = orig_filename or filename
+    result["target_filename"] = orig_filename or filename
+    result["target_hash"] = orig_hash
+    result["evaluated_latest_filename"] = filename
+    result["evaluated_hash"] = current_hash
     result["current_hash"] = current_hash
-    result["is_image"] = is_image_file(filename, file_bytes)
+    result["is_image"] = is_image_file(orig_filename or filename, orig_bytes or file_bytes)
 
     # Strictly suppress NLP assessment and document segments for image files
     if result["is_image"]:
         result["semantic_assessment"] = None
         result["tampered_segments"] = []
+
+    # Locate editorial manifest in custody chain if present
+    editorial_manifest = None
+    for rec in reversed(records):
+        if isinstance(rec.get("metadata"), dict) and rec["metadata"].get("editorial_manifest"):
+            editorial_manifest = rec["metadata"]["editorial_manifest"]
+            break
+    result["editorial_manifest"] = editorial_manifest
+
+    # Editorial and Image Differential Diagnostics
+    is_editorial_eval = (
+        result.get("status") == "VERIFIED_EDITORIAL_TRANSFORM" or
+        result.get("tamper_type") in ("CONTENT_FORGERY_DETECTED", "UNAUTHORIZED_SEMANTIC_ALTERATION")
+    )
+    result["is_authorized_edit"] = (result.get("status") == "VERIFIED_EDITORIAL_TRANSFORM")
+    
+    # Check modifications from Genesis original
+    if orig_bytes and file_bytes and orig_bytes != file_bytes:
+        result["is_modified_from_genesis"] = True
+    if any(r.get("action_type") in ("MODIFY", "REDACT") for r in records):
+        result["is_modified_from_genesis"] = True
+    if "modified_hops" not in result:
+        result["modified_hops"] = [i + 1 for i, r in enumerate(records) if r.get("action_type") in ("MODIFY", "REDACT")]
+
+    # For image assets with modifications, ensure full forensic differential payload is attached
+    if result["is_image"]:
+        if result.get("aligned_crop") and "crop_coordinates" not in result:
+            result["crop_coordinates"] = result.get("aligned_crop")
+        if orig_bytes and file_bytes and orig_bytes != file_bytes and ("forgery_percent" not in result or result.get("forgery_percent") is None):
+            try:
+                from editorial_verifier import evaluate_editorial_transformation
+                img_diff_res = evaluate_editorial_transformation(orig_bytes, file_bytes, editorial_manifest)
+                result["forgery_ratio"] = img_diff_res.get("forgery_ratio", 0.0)
+                result["forgery_percent"] = img_diff_res.get("forgery_percent", 0.0)
+                result["forged_regions"] = img_diff_res.get("forged_regions", [])
+                result["aligned_crop"] = img_diff_res.get("aligned_crop")
+                result["crop_coordinates"] = img_diff_res.get("aligned_crop")
+                if img_diff_res.get("diff_heatmap_png"):
+                    result["diff_heatmap_b64"] = base64.b64encode(img_diff_res["diff_heatmap_png"]).decode("ascii")
+            except Exception:
+                pass
 
     # Annotate with human-readable actor name so the frontend can display it
     if not result.get("valid") and "actor_id" in result:
@@ -660,6 +728,39 @@ def ela_analysis(file_id):
         return resp
     except Exception as e:
         return jsonify({"error": f"ELA failed: {str(e)}"}), 422
+
+
+@app.route("/api/files/<file_id>/editorial_diff", methods=["GET", "POST"])
+def get_editorial_diff_image(file_id):
+    """Returns the forensic difference heatmap comparing the candidate/latest image against the genesis original."""
+    uploaded = request.files.get("file") if request.method == "POST" else None
+    file_bytes, filename = _resolve_file_bytes(file_id, uploaded)
+    if not file_bytes:
+        return jsonify({"error": "file is required"}), 400
+    if not is_image_file(filename, file_bytes):
+        return jsonify({"error": "Editorial difference heatmap is only applicable to image files."}), 400
+    orig_bytes = _resolve_original_bytes(file_id)
+    if not orig_bytes:
+        return jsonify({"error": "Original genesis asset not found for comparison."}), 404
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT metadata FROM ledger_records WHERE file_id=? ORDER BY timestamp DESC", (file_id,)).fetchall()
+        conn.close()
+        manifest = None
+        for r in rows:
+            meta = json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {})
+            if meta.get("editorial_manifest"):
+                manifest = meta["editorial_manifest"]
+                break
+        from editorial_verifier import evaluate_editorial_transformation
+        res = evaluate_editorial_transformation(orig_bytes, file_bytes, manifest)
+        resp = send_file(io.BytesIO(res["diff_heatmap_png"]), mimetype="image/png")
+        resp.headers["X-Forgery-Percent"] = str(res.get("forgery_percent", 0.0))
+        resp.headers["X-Is-Legitimate"] = str(res.get("is_legitimate_transform", False))
+        resp.headers["Access-Control-Expose-Headers"] = "X-Forgery-Percent, X-Is-Legitimate"
+        return resp
+    except Exception as e:
+        return jsonify({"error": str(e)}), 422
 
 
 @app.route("/api/reset", methods=["POST"])
