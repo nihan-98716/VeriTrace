@@ -1,14 +1,16 @@
 """
 Standalone test for crypto_engine.py
 Run: python test_crypto.py
-Expected: all 3 assertions pass + tamper is caught
+Expected: all tests pass + tamper is caught + AES-256-GCM envelope encryption works
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
+import json
 
 from crypto_engine import (
     generate_keypair, pubkey_to_str, pubkey_from_str,
-    hash_file_bytes, create_record, verify_chain
+    hash_file_bytes, create_record, verify_chain,
+    encrypt_private_key_envelope, decrypt_private_key_envelope
 )
 
 # ── Setup ──────────────────────────────────────────────────────────────────
@@ -147,4 +149,37 @@ assert result_seg["status"] == "TAMPERED"
 assert len(result_seg.get("tampered_segments", [])) > 0
 print(f"[PASS] Test 8: Granular Merkle segment tamper localization verified ({result_seg['tampered_segments']})")
 
-print("\n[ALL TESTS PASSED] crypto_engine.py with Granular Merkle Tamper Localization is solid.")
+# ── Test 9: AES-256-GCM Envelope Encryption & Row HMAC Anti-Tamper ────────
+
+# 1. Roundtrip test
+user_id_test = "user-charlie"
+enc_env = encrypt_private_key_envelope(priv1, user_id_test)
+assert '"alg": "AES-256-GCM"' in enc_env
+decrypted_priv = decrypt_private_key_envelope(enc_env, user_id_test)
+assert decrypted_priv is not None
+print("[PASS] Test 9a: AES-256-GCM envelope encryption & decryption roundtrip verified")
+
+# 2. Anti-tamper HMAC verification failure test
+tampered_env_dict = json.loads(enc_env)
+# Modify a single character in ciphertext
+raw_ct = list(tampered_env_dict["ciphertext"])
+raw_ct[0] = "A" if raw_ct[0] != "A" else "B"
+tampered_env_dict["ciphertext"] = "".join(raw_ct)
+tampered_env_str = json.dumps(tampered_env_dict)
+
+try:
+    decrypt_private_key_envelope(tampered_env_str, user_id_test)
+    assert False, "Expected ValueError on tampered database key ciphertext!"
+except ValueError as e:
+    assert "CRITICAL SECURITY FAILURE" in str(e)
+    print("[PASS] Test 9b: Database key ciphertext tampering caught by Row HMAC integrity!")
+
+# 3. User ID key swapping attack test
+try:
+    decrypt_private_key_envelope(enc_env, "user-malicious-attacker")
+    assert False, "Expected ValueError on key swapping user ID attack!"
+except ValueError as e:
+    assert "CRITICAL SECURITY FAILURE" in str(e)
+    print("[PASS] Test 9c: Key swapping attack caught by bound user_id HMAC tag!")
+
+print("\n[ALL TESTS PASSED] crypto_engine.py with AES-256-GCM Envelope Encryption & Row HMAC Integrity is solid.")

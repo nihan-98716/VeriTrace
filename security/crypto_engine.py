@@ -2,12 +2,108 @@ import os
 import hashlib
 import json
 import time
+import base64
+import hmac
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey, Ed25519PublicKey
 )
 from cryptography.hazmat.primitives.asymmetric import mldsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.exceptions import InvalidSignature
+
+DEFAULT_MASTER_KEY_SEED = b"veritrace_default_master_key_seed_2026_veritrace_system"
+
+
+def get_server_master_key() -> bytes:
+    """
+    Retrieves or derives the 256-bit (32-byte) Server Master Key (KEK).
+    Reads from environment variable `VERITRACE_MASTER_KEY` if present,
+    otherwise falls back to a deterministic 32-byte seed.
+    """
+    env_key = os.environ.get("VERITRACE_MASTER_KEY")
+    if env_key:
+        return hashlib.sha256(env_key.encode("utf-8")).digest()
+    return hashlib.sha256(DEFAULT_MASTER_KEY_SEED).digest()
+
+
+def encrypt_private_key_envelope(private_key, user_id: str) -> str:
+    """
+    Encrypts a private key object (or plaintext key string) using AES-256-GCM 
+    and appends a Row-Level HMAC-SHA256 integrity tag bound to user_id.
+    """
+    if isinstance(private_key, str):
+        raw_payload = private_key
+    else:
+        raw_payload = privkey_to_str(private_key)
+
+    master_key = get_server_master_key()
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(master_key)
+    
+    ciphertext = aesgcm.encrypt(nonce, raw_payload.encode("utf-8"), None)
+    
+    enc_b64 = base64.b64encode(ciphertext).decode("ascii")
+    nonce_b64 = base64.b64encode(nonce).decode("ascii")
+    
+    # Compute Row-Level HMAC Integrity tag bound to user_id
+    hmac_tag = hmac.new(
+        master_key,
+        f"{user_id}:{enc_b64}:{nonce_b64}".encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    
+    envelope = {
+        "v": 1,
+        "alg": "AES-256-GCM",
+        "ciphertext": enc_b64,
+        "nonce": nonce_b64,
+        "hmac": hmac_tag
+    }
+    return json.dumps(envelope)
+
+
+def decrypt_private_key_envelope(envelope_or_pem_str: str, user_id: str):
+    """
+    Decrypts an AES-256-GCM envelope JSON string and verifies row HMAC integrity.
+    If the string is legacy un-encrypted PEM/JSON, loads it cleanly for backward compatibility.
+    """
+    if not envelope_or_pem_str:
+        return None
+
+    # Check if string is an AES-256-GCM envelope JSON
+    try:
+        data = json.loads(envelope_or_pem_str)
+        if isinstance(data, dict) and data.get("alg") == "AES-256-GCM" and "ciphertext" in data:
+            master_key = get_server_master_key()
+            enc_b64 = data["ciphertext"]
+            nonce_b64 = data["nonce"]
+            recorded_hmac = data.get("hmac", "")
+            
+            # 1. Verify Anti-Tamper HMAC
+            calculated_hmac = hmac.new(
+                master_key,
+                f"{user_id}:{enc_b64}:{nonce_b64}".encode("utf-8"),
+                hashlib.sha256
+            ).hexdigest()
+            
+            if not hmac.compare_digest(calculated_hmac, recorded_hmac):
+                raise ValueError(f"CRITICAL SECURITY FAILURE: Private key for user '{user_id}' has been tampered with or modified in the database!")
+            
+            # 2. Decrypt AES-256-GCM Payload
+            aesgcm = AESGCM(master_key)
+            nonce = base64.b64decode(nonce_b64)
+            ciphertext = base64.b64decode(enc_b64)
+            
+            raw_payload_bytes = aesgcm.decrypt(nonce, ciphertext, None)
+            raw_payload_str = raw_payload_bytes.decode("utf-8")
+            return privkey_from_str(raw_payload_str)
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Legacy un-encrypted PEM or JSON string fallback
+    return privkey_from_str(envelope_or_pem_str)
+
 
 
 def generate_keypair(algo="ed25519"):
