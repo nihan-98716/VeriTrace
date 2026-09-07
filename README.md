@@ -2,7 +2,7 @@
 
 > **Verify the file. Trace the history. Trust the evidence.**
 
-VeriTrace is an end-to-end cryptographic chain-of-custody and digital forensics system. It combines SHA-256 content hashing, Ed25519 / Hybrid Post-Quantum signatures, RFC 3161 external trusted timestamping, Zero-Knowledge Merkle redaction, frequency-domain forensic localization (2D-FFT & Block-DCT), and grounded semantic NLP to prove not just *what* a file is, but *who handled it, when it was certified, and exactly how it was altered*.
+VeriTrace is an end-to-end cryptographic chain-of-custody and digital forensics system. It combines SHA-256 content hashing, Ed25519 / ML-DSA 65 Hybrid Post-Quantum signatures, RFC 3161 external trusted timestamping, Zero-Knowledge Merkle redaction, frequency-domain forensic localization (2D-FFT & Block-DCT), and grounded semantic NLP to prove not just *what* a file is, but *who handled it, when it was certified, and exactly how it was altered*.
 
 ---
 
