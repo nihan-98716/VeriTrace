@@ -1,3 +1,4 @@
+import os
 import hashlib
 import json
 import time
@@ -62,29 +63,65 @@ def pubkey_from_str(pub_str: str):
     return Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub_str))
 
 
+def privkey_to_str(private_key) -> str:
+    """Serializes private key (Ed25519, ML-DSA-65, or hybrid) to PEM string or JSON."""
+    if isinstance(private_key, dict):
+        return json.dumps({k: privkey_to_str(v) for k, v in private_key.items()})
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    return pem.decode("ascii")
+
+
+def privkey_from_str(priv_str: str):
+    """Deserializes private key from PEM string or JSON."""
+    if not priv_str:
+        return None
+    try:
+        data = json.loads(priv_str)
+        if isinstance(data, dict):
+            return {k: privkey_from_str(v) for k, v in data.items()}
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return serialization.load_pem_private_key(priv_str.encode("ascii"), password=None)
+
+
 def hash_file_bytes(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest()
 
 
 def _canonical_bytes(record: dict) -> bytes:
     """Deterministic serialization so signing/verifying agree byte-for-byte."""
-    signable = {k: v for k, v in record.items()
-                if k not in ("record_hash", "signature", "mldsa_signature", "algo")}
+    signable = {}
+    for k, v in record.items():
+        if k in ("record_hash", "signature", "mldsa_signature", "algo", "rfc3161"):
+            continue
+        if k == "metadata" and isinstance(v, dict):
+            v = {mk: mv for mk, mv in v.items() if mk != "rfc3161"}
+        signable[k] = v
     return json.dumps(signable, sort_keys=True).encode()
 
 
 def create_record(file_id, file_content_hash, prev_record_hash, action_type,
                    actor_id, private_key, metadata=None,
-                   declared_transformation=None, file_bytes=None, filename=None):
+                   declared_transformation=None, file_bytes=None, filename=None,
+                   request_tsa=False):
     metadata = metadata or {}
     
-    # Granular Merkle segment hashing if file bytes are provided
+    # Granular Merkle segment hashing and text preservation if file bytes are provided
     if file_bytes and filename:
         try:
             from document_forensics import compute_document_merkle_tree
             doc_info = compute_document_merkle_tree(file_bytes, filename)
             metadata["merkle_root"] = doc_info["merkle_root"]
             metadata["segments"] = doc_info["segments"]
+            
+            # For text files, store raw content in genesis record to support semantic diffing
+            ext = filename.lower().split('.')[-1] if '.' in filename else ''
+            if ext in ('txt', 'md', 'py', 'csv', 'json', 'html', 'css', 'log', ''):
+                metadata["raw_text"] = file_bytes.decode("utf-8", errors="ignore")
         except Exception:
             pass
 
@@ -92,7 +129,7 @@ def create_record(file_id, file_content_hash, prev_record_hash, action_type,
         "file_id": file_id,
         "file_content_hash": file_content_hash,
         "prev_record_hash": prev_record_hash,     # None for the first record
-        "action_type": action_type,               # CREATE | MODIFY | TRANSFER
+        "action_type": action_type,               # CREATE | MODIFY | TRANSFER | REDACT
         "actor_id": actor_id,
         "declared_transformation": declared_transformation,
         "timestamp": time.time(),
@@ -114,6 +151,18 @@ def create_record(file_id, file_content_hash, prev_record_hash, action_type,
         record["signature"] = ed_sig.hex()
 
     record["record_hash"] = hashlib.sha256(signable).hexdigest()
+    
+    # Optional RFC 3161 TSA external notarization
+    if request_tsa:
+        try:
+            from tsa_client import request_timestamp_token
+            tsa_meta = request_timestamp_token(record["record_hash"])
+            if tsa_meta.get("success"):
+                record["rfc3161"] = tsa_meta
+                record["metadata"]["rfc3161"] = tsa_meta
+        except Exception:
+            pass
+            
     return record
 
 
@@ -139,13 +188,15 @@ def verify_record_signature(record: dict, public_key) -> bool:
 
 
 def verify_chain(records: list, public_keys: dict, current_file_hash: str,
-                  revoked_at_map: dict = None, current_file_bytes: bytes = None, filename: str = None) -> dict:
+                  revoked_at_map: dict = None, current_file_bytes: bytes = None,
+                  filename: str = None, original_file_bytes: bytes = None) -> dict:
     """
-    records          : list of ledger record dicts, ORDERED oldest -> newest
-    public_keys      : {actor_id: Ed25519PublicKey}
-    current_file_hash: SHA-256 hex of the file AS RECEIVED right now
-    revoked_at_map   : optional {actor_id: revoked_at_float_or_None}
-                       Used to reject records signed after a key was revoked.
+    records            : list of ledger record dicts, ORDERED oldest -> newest
+    public_keys        : {actor_id: Ed25519PublicKey / Hybrid}
+    current_file_hash  : SHA-256 hex of the file AS RECEIVED right now
+    revoked_at_map     : optional {actor_id: revoked_at_float_or_None}
+    current_file_bytes : bytes of candidate file for Merkle/ZK/Semantic checks
+    original_file_bytes: optional original file bytes for semantic diff
     """
     if not records:
         return {"valid": False, "reason": "no custody history found",
@@ -195,36 +246,162 @@ def verify_chain(records: list, public_keys: dict, current_file_hash: str,
                 "status": "TAMPERED"
             }
 
-        prev_hash = r["record_hash"]
+        # Pillar 2b: In a TRANSFER action, the file content must NOT be modified
+        if r.get("action_type") == "TRANSFER" and i > 0:
+            prev_content = records[i - 1]["file_content_hash"]
+            if r["file_content_hash"] != prev_content:
+                return {
+                    "valid": False, "broken_at": i, "actor_id": r["actor_id"],
+                    "reason": f"unauthorized file content alteration during TRANSFER at hop {i} (content changed without declared MODIFY)",
+                    "expected_hash": prev_content,
+                    "current_hash": r["file_content_hash"],
+                    "status": "TAMPERED"
+                }
 
-    # Pillar 3: current file must match the last recorded content state
-    latest = records[-1]
-    if latest["file_content_hash"] != current_file_hash:
-        tampered_segments = []
-        meta = latest.get("metadata") or {}
-        if isinstance(meta, dict) and meta.get("segments") and current_file_bytes and filename:
+        # Validate RFC 3161 TSA external certified timestamp if present
+        rfc_info = r.get("rfc3161") or (isinstance(r.get("metadata"), dict) and r["metadata"].get("rfc3161"))
+        if rfc_info and rfc_info.get("tst_token_b64"):
             try:
-                from document_forensics import analyze_tampered_segments
-                tampered_segments = analyze_tampered_segments(meta["segments"], current_file_bytes, filename)
+                from tsa_client import verify_timestamp_token
+                tst_res = verify_timestamp_token(rfc_info["tst_token_b64"], r["record_hash"])
+                if tst_res.get("valid"):
+                    r["tsa_certified_utc"] = tst_res.get("certified_utc")
+                    r["tsa_certified_ist"] = tst_res.get("certified_ist")
+                    r["tsa_cert_info"] = tst_res.get("cert_info")
+                    r["tsa_serial"] = tst_res.get("serial_number")
+                    r["tsa_policy"] = tst_res.get("tsa_policy")
+                    r["tsa_verified"] = True
             except Exception:
                 pass
+        elif rfc_info and (rfc_info.get("certified_utc") or rfc_info.get("certified_ist")):
+            r["tsa_certified_utc"] = rfc_info.get("certified_utc")
+            r["tsa_certified_ist"] = rfc_info.get("certified_ist")
+            r["tsa_cert_info"] = rfc_info.get("cert_info")
+            r["tsa_serial"] = rfc_info.get("token_serial")
+            r["tsa_policy"] = rfc_info.get("tsa_policy")
 
-        reason_msg = (
-            "current file hash does not match the last recorded hash — "
-            "silent modification outside the custody platform detected"
-        )
+        prev_hash = r["record_hash"]
+
+    latest = records[-1]
+    meta = latest.get("metadata") or {}
+
+    # Feature 2: Zero-Knowledge Verifiable Redaction Check
+    if (latest.get("action_type") == "REDACT" or "redaction_proof" in meta) and current_file_bytes:
+        try:
+            from zk_redaction import verify_redaction_proof
+            proof_dict = meta.get("redaction_proof")
+            if proof_dict:
+                orig_root = records[0].get("metadata", {}).get("merkle_root") or proof_dict.get("orig_root")
+                redact_res = verify_redaction_proof(proof_dict, current_file_bytes, orig_root)
+                if redact_res.get("valid"):
+                    return {
+                        "valid": True,
+                        "status": "VERIFIED_REDACTED",
+                        "hops": len(records),
+                        "message": redact_res.get("message"),
+                        "redacted_segments": redact_res.get("redacted_segments")
+                    }
+        except Exception:
+            pass
+
+    # Determine if file is an image or non-text binary
+    is_img = False
+    if filename:
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif", ".ico"):
+            is_img = True
+    if not is_img and current_file_bytes:
+        if (current_file_bytes.startswith(b"\x89PNG") or
+            current_file_bytes.startswith(b"\xff\xd8\xff") or
+            (current_file_bytes.startswith(b"RIFF") and b"WEBP" in current_file_bytes[:16]) or
+            current_file_bytes.startswith(b"BM") or
+            current_file_bytes.startswith(b"GIF8")):
+            is_img = True
+
+    # Pillar 3: current file must match the last recorded content state
+    if latest["file_content_hash"] != current_file_hash:
+        # Find if the submitted file matches an EARLIER hop (e.g. stale version, rollback attack)
+        matched_earlier_hop = None
+        for idx in range(len(records) - 2, -1, -1):
+            if records[idx]["file_content_hash"] == current_file_hash:
+                matched_earlier_hop = idx
+                break
+
+        # Check where the content was supposed to advance past the submitted file
+        if matched_earlier_hop is not None:
+            broken_hop_idx = matched_earlier_hop + 1
+            tamper_type = "HISTORICAL_ROLLBACK"
+            reason_msg = (
+                f"Stale / Historical version: current file matches historical state at hop #{matched_earlier_hop + 1} ({records[matched_earlier_hop]['action_type']}), "
+                f"but lacks the authorized update at hop #{broken_hop_idx + 1} ({records[broken_hop_idx]['action_type']})"
+            )
+            broken_actor = records[broken_hop_idx]["actor_id"]
+            expected_h = records[broken_hop_idx]["file_content_hash"]
+        else:
+            broken_hop_idx = len(records) - 1
+            tamper_type = "EXTERNAL_MODIFICATION"
+            broken_actor = latest["actor_id"]
+            expected_h = latest["file_content_hash"]
+            reason_msg = (
+                f"Current file hash does not match ledger state at final custody hop #{len(records)} ({latest['action_type']}) — "
+                f"silent external modification detected outside the verified chain of custody"
+            )
+
+        # Segment and Semantic NLP analysis (strictly disabled for image files)
+        tampered_segments = []
+        semantic_assessment = None
+        if not is_img:
+            # Look for segments in latest or genesis metadata
+            base_segments = meta.get("segments") or records[0].get("metadata", {}).get("segments")
+            if isinstance(base_segments, dict) and current_file_bytes and filename:
+                try:
+                    from document_forensics import analyze_tampered_segments
+                    tampered_segments = analyze_tampered_segments(base_segments, current_file_bytes, filename)
+                except Exception:
+                    pass
+
+            # Semantic NLP Tamper Assessment
+            if current_file_bytes and filename:
+                try:
+                    from semantic_assessor import assess_document_tampering
+                    orig_b = original_file_bytes
+                    if not orig_b:
+                        raw_text = records[0].get("metadata", {}).get("raw_text")
+                        if raw_text:
+                            orig_b = raw_text.encode("utf-8")
+                    if orig_b:
+                        semantic_assessment = assess_document_tampering(orig_b, current_file_bytes, filename)
+                except Exception:
+                    pass
+
         if tampered_segments:
             reason_msg += f" (Altered parts: {', '.join(tampered_segments)})"
 
         return {
             "valid": False,
-            "broken_at": len(records) - 1,
-            "actor_id": latest["actor_id"],
+            "broken_at": broken_hop_idx,
+            "actor_id": broken_actor,
+            "tamper_type": tamper_type,
             "reason": reason_msg,
             "tampered_segments": tampered_segments,
-            "expected_hash": latest["file_content_hash"],
+            "semantic_assessment": semantic_assessment,
+            "expected_hash": expected_h,
             "current_hash": current_file_hash,
             "status": "TAMPERED"
         }
 
-    return {"valid": True, "status": "VERIFIED", "hops": len(records)}
+    # For VERIFIED chains, assess semantic impact if document was modified from genesis original
+    sem_eval = None
+    if not is_img and current_file_bytes and original_file_bytes and (current_file_bytes != original_file_bytes):
+        try:
+            from semantic_assessor import assess_document_tampering
+            sem_eval = assess_document_tampering(original_file_bytes, current_file_bytes, filename)
+        except Exception:
+            pass
+
+    return {
+        "valid": True,
+        "status": "VERIFIED",
+        "hops": len(records),
+        "semantic_assessment": sem_eval
+    }

@@ -80,6 +80,7 @@
       <!-- CTAs -->
       <div class="hero-actions">
         <button class="btn btn-primary hero-cta" id="btn-quick-demo">⚡ Quick Demo Setup</button>
+        <button class="btn btn-secondary hero-cta" id="btn-reset-demo" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;background:rgba(239,68,68,0.1)">🗑️ Reset All & Redo</button>
         <button class="btn btn-ghost" onclick="document.querySelector('.nav').scrollIntoView({behavior:'smooth'})">Explore System ↓</button>
       </div>
 
@@ -111,7 +112,10 @@
           <span class="nav-tab-step">04</span>Verify
         </button>
       </div>
-      <div class="nav-user" id="nav-user">No user selected</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="nav-user" id="nav-user">No user selected</div>
+        <button class="btn btn-ghost" id="btn-nav-reset" title="Reset all data & redo" style="padding:4px 10px;font-size:12px;color:#f87171;border:1px solid rgba(248,113,113,0.3)">↺ Reset</button>
+      </div>
     </nav>
 
     <!-- ══════════════════════════════════════════════════════════
@@ -234,6 +238,7 @@
             <select id="tl-action-type">
               <option value="TRANSFER">TRANSFER (custody change, same content)</option>
               <option value="MODIFY">MODIFY (new file version)</option>
+              <option value="REDACT">REDACT (Zero-Knowledge Verifiable Redaction)</option>
             </select>
           </div>
           <div class="form-group" style="flex:1">
@@ -241,9 +246,12 @@
             <input type="text" id="tl-transform" placeholder="e.g. web compression, watermark added" />
           </div>
         </div>
-        <div class="drop-zone compact" id="tl-dropzone">
+        <div id="tl-transfer-notice" class="info-notice" style="padding:10px 14px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:6px;font-size:12px;color:#93c5fd;margin:8px 0">
+          🔄 <strong>Custody TRANSFER:</strong> Reassigns custodianship while cryptographically preserving the existing verified file content. No file re-upload required.
+        </div>
+        <div class="drop-zone compact hidden" id="tl-dropzone">
           <input type="file" id="tl-file" class="hidden-input" />
-          <p>Drop updated file here (required for MODIFY, optional for TRANSFER)</p>
+          <p id="tl-dropzone-prompt">Drop new / updated file version here (required for MODIFY)</p>
           <p class="drop-filename" id="tl-filename"></p>
         </div>
         <div class="form-row" style="gap:8px">
@@ -293,9 +301,11 @@
         </div>
         <div class="drop-zone" id="verify-dropzone">
           <div class="drop-icon">🔍</div>
-          <p>Drop file to verify or <span class="drop-link">click to browse</span></p>
+          <p><strong>Auto-Verifies Current Ledger State.</strong></p>
+          <p class="muted" style="font-size:12px;margin-top:2px">(Optional) Drop an external file here to test tamper/modification, or leave empty to verify the registered file directly</p>
           <input type="file" id="verify-file" class="hidden-input" />
           <p class="drop-filename" id="verify-filename"></p>
+          <button type="button" id="btn-clear-verify-file" class="btn-ghost hidden" style="margin-top:6px;font-size:11px;color:#f87171;padding:2px 8px;border:1px solid rgba(248,113,113,0.3);border-radius:4px">✕ Clear external file (verify registered file directly)</button>
         </div>
 
         <!-- SHA-256 preview for the file being verified -->
@@ -310,6 +320,7 @@
 
       <!-- Verdict badge -->
       <div id="verdict-wrap" class="verdict-wrap hidden">
+        <div id="verdict-subject" style="font-size:12px;color:var(--vt-cyan);font-family:var(--vt-font-mono);margin-bottom:8px"></div>
         <div id="verdict-badge" class="badge"></div>
         <div id="verdict-detail" class="verdict-detail"></div>
       </div>
@@ -335,11 +346,46 @@
 
       <!-- ELA heatmap -->
       <div id="ela-wrap" class="card ela-wrap hidden">
-        <div class="ela-header">
-          <span class="ela-title">📡 ELA Heatmap</span>
+        <div class="ela-header" style="flex-wrap:wrap;gap:8px">
+          <div>
+            <span class="ela-title">📡 ELA Heatmap</span>
+            <div id="ela-file-meta" style="font-size:11px;color:var(--vt-cyan);margin-top:2px;font-family:var(--vt-font-mono)"></div>
+          </div>
           <span class="ela-label">Supporting forensic signal only — heuristic, not cryptographic proof</span>
         </div>
         <img id="ela-img" src="" alt="ELA heatmap" class="ela-img" />
+      </div>
+
+      <!-- Semantic NLP Risk Assessment -->
+      <div id="semantic-wrap" class="card hidden" style="margin-top:16px;border-left:4px solid #a855f7">
+        <div class="ela-header">
+          <span class="ela-title">🧠 NLP Semantic Impact Assessment</span>
+          <span id="semantic-risk-badge" class="badge" style="font-size:11px;padding:3px 10px"></span>
+        </div>
+        <p id="semantic-summary" style="font-size:13px;color:var(--vt-text);margin:8px 0;line-height:1.5"></p>
+        <div id="semantic-details" style="font-size:12px;margin-top:6px"></div>
+      </div>
+
+      <!-- Advanced Frequency Domain Forensics (2D-FFT & Block-DCT) -->
+      <div id="freq-wrap" class="card hidden" style="margin-top:16px">
+        <div class="ela-header" style="flex-wrap:wrap;gap:8px">
+          <div>
+            <span class="ela-title">🔬 Frequency Domain Forensics</span>
+            <div id="freq-file-meta" style="font-size:11px;color:var(--vt-cyan);margin-top:2px;font-family:var(--vt-font-mono)"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">
+          <div style="flex:1;min-width:240px">
+            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-cyan)">2D-FFT Power Spectrum (AI Grid Detection)</div>
+            <img id="fft-img" src="" alt="2D-FFT Spectrum" style="width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1)" />
+            <p id="fft-summary" style="font-size:11px;color:var(--vt-muted);margin-top:6px"></p>
+          </div>
+          <div style="flex:1;min-width:240px">
+            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-purple)">8x8 Block-DCT Splicing Localization</div>
+            <img id="dct-img" src="" alt="Block-DCT Splicing" style="width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1)" />
+            <p id="dct-summary" style="font-size:11px;color:var(--vt-muted);margin-top:6px"></p>
+          </div>
+        </div>
       </div>
     </section>
 

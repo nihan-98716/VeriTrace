@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     public_key TEXT NOT NULL,
+    private_key TEXT,
     revoked_at REAL
 );
 
@@ -41,5 +42,10 @@ def get_db():
 def init_db():
     conn = get_db()
     conn.executescript(SCHEMA)
-    conn.commit()
+    # Ensure private_key column exists for existing databases
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN private_key TEXT")
+        conn.commit()
+    except Exception:
+        pass
     conn.close()

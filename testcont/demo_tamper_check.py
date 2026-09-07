@@ -81,7 +81,8 @@ res_tamper = verify_chain(
     public_keys,
     tamper_hash,
     current_file_bytes=tamper_bytes,
-    filename="tamper.txt"
+    filename="tamper.txt",
+    original_file_bytes=test_bytes
 )
 
 print(f"    Status: {res_tamper['status']}")
@@ -93,5 +94,14 @@ if "tampered_segments" in res_tamper and res_tamper["tampered_segments"]:
     print("\n    GRANULAR ALTERATION LOCALIZATION:")
     for segment in res_tamper["tampered_segments"]:
         print(f"       [ALTERED] Segment Identified: {segment}")
+
+if res_tamper.get("semantic_assessment"):
+    sem = res_tamper["semantic_assessment"]
+    print(f"\n    SEMANTIC NLP RISK ASSESSMENT: [{sem['overall_risk']}]")
+    print(f"       Summary: {sem['summary']}")
+    for eval_item in sem.get("assessments", []):
+        print(f"       - {eval_item['segment_name']} Risk: {eval_item['risk_level']} (Drift: {eval_item['semantic_drift']*100:.1f}%)")
+        for r_reason in eval_item.get("risk_reasons", []):
+            print(f"         * {r_reason}")
 
 print("=" * 65)

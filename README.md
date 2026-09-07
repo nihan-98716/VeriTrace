@@ -2,225 +2,184 @@
 
 > **Verify the file. Trace the history. Trust the evidence.**
 
-Cryptographic chain-of-custody for digital files — combining SHA-256 hashing, Ed25519 digital signatures, and a hash-linked custody ledger to prove not just *what* a file is, but *who handled it* and *what happened to it*.
+VeriTrace is an end-to-end cryptographic chain-of-custody and digital forensics system. It combines SHA-256 content hashing, Ed25519 / Hybrid Post-Quantum signatures, RFC 3161 external trusted timestamping, Zero-Knowledge Merkle redaction, frequency-domain forensic localization (2D-FFT & Block-DCT), and grounded semantic NLP to prove not just *what* a file is, but *who handled it, when it was certified, and exactly how it was altered*.
 
 ---
 
-## What it does
+## Key Capabilities
 
-Traditional file verification answers: *"Is this file the same as the one I have?"*
+### 1. Cryptographic Chain-of-Custody (Ledger)
+- **Immutable Forward Linkage**: Every action (`CREATE`, `TRANSFER`, `MODIFY`, `REDACT`) produces a hash-linked block referencing `prev_record_hash`.
+- **Hybrid Digital Signatures**: Supports classical Ed25519 as well as Hybrid Post-Quantum (PQC) digital signatures (ML-DSA / Dilithium compatible) for quantum-resistant verification.
+- **Strict Transfer Invariance**: A `TRANSFER` action strictly forbids file byte alterations; content modifications must be formally declared via `MODIFY` or `REDACT`.
+- **Persistent Key Infrastructure**: Signer keypairs are serialized via PKCS#8 PEM format and stored persistently in SQLite so identities survive server restarts.
 
-VeriTrace answers: *"Who handled this file, what happened to it, and can the entire history be cryptographically verified?"*
+### 2. RFC 3161 External Trusted Timestamping (TSA)
+- **Third-Party Notarization**: Automatically generates and submits SHA-256 digest timestamp requests to an RFC 3161 compliant Time Stamping Authority (FreeTSA).
+- **Cryptographic Time Tokens**: Extracts, stores, and cryptographically verifies ASN.1 DER Timestamp Tokens (`.tsr`), policy OIDs, token serial numbers, and certificate chains.
+- **Dual Timezones**: Surfaces legally verifiable timestamps formatted in both UTC and Indian Standard Time (IST).
 
-Every action performed on a file — creation, modification, transfer — produces a signed record in a tamper-evident chain:
+### 3. Zero-Knowledge Verifiable Redaction (ZK-Redaction)
+- **Merkle Tree Selective Disclosure**: Redact sensitive lines or sections from text documents while cryptographically verifying that unredacted content perfectly preserves the certified genesis Merkle root.
+- **Authentic Redaction Verification**: The verification engine recognizes authentic redaction proofs (`VERIFIED_REDACTED`), distinguishing authorized privacy redaction from malicious tampering.
 
-```
-CREATE → MODIFY → TRANSFER → MODIFY → VERIFY
-```
+### 4. Frequency Domain & Spatial Forensics
+- **Error Level Analysis (ELA)**: Re-saves images across fixed compression matrices to highlight regional compression inconsistencies.
+- **2D-FFT Power Spectrum**: Fast Fourier Transform spatial frequency decomposition analyzing radial residuals, conjugate symmetry, and high-frequency harmonics to detect synthetic generative AI lattice grids.
+- **8×8 Block-DCT Splicing Localization**: Computes Discrete Cosine Transform block differential matrices against the genesis benchmark to localize foreign spliced regions down to exact pixel coordinates `(x, y, w, h)`.
 
-If a file is altered outside the recorded workflow, its SHA-256 hash diverges from the latest trusted record and VeriTrace flags it immediately.
+### 5. Grounded Semantic NLP Assessment
+- **Deterministic Document Analysis**: Strictly extracts line-by-line diffs, numerical entity shifts, polarity inversions, antonym flips, and clause mutations.
+- **Risk Severity Categorization**: Automatically scores document tampering into four discrete risk levels: `CRITICAL`, `SUBSTANTIVE`, `MODERATE`, or `BENIGN`, with exact side-by-side quotes.
+
+### 6. Modality Isolation & Decoupled Verification
+- **Strict Format Routing**: Image forensics (ELA, FFT, Block-DCT) are strictly reserved for image files; text files strictly route to Merkle ZK and NLP analysis.
+- **Decoupled Verification Pipeline**:
+  - **Chain Verification**: Evaluates the certified Genesis file against the ledger to pinpoint historical rollbacks, stale versions, or unauthorized modification hops.
+  - **Forensics Pipeline**: Evaluates the active modified/tampered asset against the Genesis baseline to localize spatial, compression, and frequency deviations.
 
 ---
 
-## Setup
+## Project Structure
+
+```
+VeriTrace/
+├── backend/
+│   ├── app.py                   # Flask REST API endpoints & route handlers
+│   ├── db.py                    # SQLite schema, persistent key store & connections
+│   ├── requirements.txt         # Python dependencies
+│   ├── uploads/                 # Storage for genesis, latest, and candidate files
+│   └── veritrace.db             # SQLite database (ledger, files, users)
+├── frontend/
+│   ├── index.html               # Single-page UI (Onboarding, Register, Timeline, Verify)
+│   ├── veritrace.css            # Dark forensic dashboard styles
+│   └── app.js                   # Client controller, API client & dynamic renderers
+├── security/
+│   ├── crypto_engine.py         # SHA-256, Ed25519, Hybrid PQC & verify_chain logic
+│   ├── ela.py                   # Error Level Analysis (ELA) heatmap generation
+│   ├── frequency_forensics.py   # 2D-FFT power spectrum & 8x8 Block-DCT splicing
+│   ├── semantic_assessor.py     # Grounded NLP entity & polarity tamper assessor
+│   ├── zk_redaction.py          # Merkle tree zero-knowledge redaction engine
+│   ├── tsa_client.py            # RFC 3161 HTTP client, ASN.1 parsing & verification
+│   └── document_forensics.py    # Segment-level document hashing & comparison
+├── testcont/                    # Demonstration assets (original/tampered images & text)
+├── docs/                        # Architecture, DB schema, and API documentation
+└── README.md                    # Project documentation
+```
+
+---
+
+## Setup & Installation
 
 ### Prerequisites
-
 - Python 3.8+
+- Modern web browser (Chrome, Firefox, Edge, Safari)
 
-### 1. Clone
-
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/nihan-98716/VeriTrace.git
 cd VeriTrace
 ```
 
-### 2. Create a virtual environment
-
+### 2. Set Up Virtual Environment
 ```bash
 # Linux / macOS
-python -m venv venv && source venv/bin/activate
+python -m venv venv
+source venv/bin/activate
 
-# Windows
-python -m venv venv && venv\Scripts\activate
+# Windows (PowerShell)
+python -m venv venv
+venv\Scripts\Activate.ps1
 ```
 
-### 3. Install dependencies
-
+### 3. Install Dependencies
 ```bash
 pip install -r backend/requirements.txt
 ```
 
-### 4. Start the server
+### 4. Run the Application
 
+Start the Flask backend server:
 ```bash
-cd backend
-python app.py
+python backend/app.py
 ```
+The backend API starts at `http://127.0.0.1:5000`.
 
-Flask API runs at `http://localhost:5000`. Open `frontend/index.html` in your browser to use the interface.
+Start a static web server for the frontend (in a separate terminal):
+```bash
+cd frontend
+python -m http.server 3000
+```
+Open `http://localhost:3000` in your web browser.
 
 ---
 
-## How it works
+## How It Works
 
-### Registration
+### Step 1: Custodian Registration
+When an actor registers (e.g. `Alice`, `Bob`), VeriTrace generates a certified keypair (Ed25519 or Hybrid PQC). The public key is recorded in the registry, and the private key is serialized via PKCS#8 PEM into the local database.
 
-When a user registers, VeriTrace generates an **Ed25519 key pair** and stores the public key in the registry. Every subsequent action they take is signed with their private key.
+### Step 2: File Ingestion (`CREATE`)
+Uploading a file computes its SHA-256 content hash, packages it with actor metadata, requests an external RFC 3161 certified timestamp token, signs the record, and appends it to the immutable SQLite ledger.
 
-### File upload (CREATE)
-
-```
-File → SHA-256 hash → CREATE record → Ed25519 signature → Ledger
-```
-
-The initial record establishes the file's cryptographic identity.
-
-### Modify / Transfer
-
-Each action appends a new record to the chain. Every record stores:
-
-| Field                   | Purpose                                    |
-|-------------------------|--------------------------------------------|
-| File ID                 | Identifies the tracked file                |
-| Current file hash       | SHA-256 of the file at this point in time  |
-| Previous record hash    | Links this record to the one before it     |
-| Action type             | `CREATE`, `MODIFY`, or `TRANSFER`          |
-| Actor ID                | Who performed the action                   |
-| Timestamp               | When it happened                           |
-| Declared transformation | What was done                              |
-| Metadata                | Any additional context                     |
-| Digital signature       | Cryptographic proof of record authenticity |
-
-Records are linked like this:
+### Step 3: Chain-of-Custody (`TRANSFER` / `MODIFY` / `REDACT`)
+- **TRANSFER**: Hands over custody to another registered actor while asserting identical file hash.
+- **MODIFY**: Records an intentional content update, saving the new version and linking its new hash to the preceding block.
+- **REDACT**: Computes Merkle leaf hashes for all text lines, blacks out selected lines, and generates a zero-knowledge membership proof referencing the genesis Merkle root.
 
 ```
-┌──────────┐
-│ Record 1 │
-└────┬─────┘
-     │ prev_hash
-     ▼
-┌──────────┐
-│ Record 2 │
-└────┬─────┘
-     │ prev_hash
-     ▼
-┌──────────┐
-│ Record 3 │
-└──────────┘
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ Hop 1: CREATE   │       │ Hop 2: TRANSFER │       │ Hop 3: MODIFY   │
+│ Actor: Alice    │──────▶│ Actor: Bob      │──────▶│ Actor: Alice    │
+│ Hash: 1f814cc3… │       │ Hash: 1f814cc3… │       │ Hash: e59bfcc5… │
+│ TSA: Certified  │       │ TSA: Certified  │       │ TSA: Certified  │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
 ```
 
-Altering any record in the chain breaks the link and is immediately detectable.
-
-### Verification
-
-VeriTrace runs six checks during verification:
-
-1. Hash the supplied file
-2. Retrieve the custody chain
-3. Verify record-to-record links
-4. Verify Ed25519 signatures on each record
-5. Confirm all actors are registered
-6. Compare the current file hash against the latest trusted record
-
-**Possible verdicts:**
-
-| Verdict              | Meaning                                                    |
-|----------------------|------------------------------------------------------------|
-| `VERIFIED`           | File and custody history are cryptographically consistent  |
-| `TAMPERED`           | File or custody evidence does not match the trusted record |
-| `UNKNOWN PROVENANCE` | Sufficient trusted provenance cannot be established        |
+### Step 4: Verification & Forensic Inspection
+When verifying an asset:
+1. **Chain Verification**: Replays every digital signature in sequence, validates RFC 3161 timestamps, checks key revocation dates, and verifies hash continuity.
+2. **Tamper Diagnosis**: If content diverges, VeriTrace identifies whether it is an `EXTERNAL_MODIFICATION` or a `HISTORICAL_ROLLBACK` and pinpoints the exact custodian and hop where divergence occurred.
+3. **Forensic Overlays**:
+   - **Images**: Displays ELA compression artifacts and 8×8 Block-DCT differential splicing heatmaps with coordinate localization.
+   - **Text**: Displays ZK Merkle proof statuses and NLP risk assessments highlighting modified entities, dates, dollar amounts, or inverted clauses.
 
 ---
 
-## API reference
+## API Reference
 
-| Endpoint                    | Method | Description                      |
-|-----------------------------|--------|----------------------------------|
-| `/api/users/register`       | POST   | Register a custodian             |
-| `/api/users`                | GET    | List registered users            |
-| `/api/files/upload`         | POST   | Create a new file record         |
-| `/api/files`                | GET    | List tracked files               |
-| `/api/files/<id>/action`    | POST   | Add a `MODIFY` or `TRANSFER` action |
-| `/api/files/<id>/verify`    | POST   | Cryptographically verify a file  |
-| `/api/files/<id>/history`   | GET    | Retrieve custody history         |
-| `/api/files/<id>/ela`       | POST   | Generate Error Level Analysis    |
-
----
-
-## Image forensics (ELA)
-
-For supported image formats, VeriTrace provides **Error Level Analysis** as a supplementary visual aid.
-
-```
-Input image → JPEG re-save → Pixel difference → Brightness amplification → ELA output
-```
-
-ELA highlights regions of an image that may have been edited. It is a heuristic tool — useful for investigation, but not a substitute for the cryptographic verification verdict.
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/users/register` | `POST` | Registers a new custodian and returns public key metadata |
+| `/api/users` | `GET` | Returns list of all active registered custodians |
+| `/api/files/upload` | `POST` | Uploads and registers a new file (`CREATE` record) |
+| `/api/files` | `GET` | Lists all registered files with status & latest filename indicators |
+| `/api/files/<id>/action` | `POST` | Appends a `TRANSFER` or `MODIFY` custody hop |
+| `/api/files/<id>/redact` | `POST` | Executes ZK Merkle redaction on text files |
+| `/api/files/<id>/verify` | `POST` | Verifies cryptographic chain-of-custody and provenance |
+| `/api/files/<id>/history` | `GET` | Returns chronological custody timeline with TSA audit tokens |
+| `/api/files/<id>/ela` | `POST` | Returns Error Level Analysis (ELA) heatmap image |
+| `/api/files/<id>/frequency_analysis` | `POST` | Computes 2D-FFT and Block-DCT differential splicing localization |
+| `/api/reset` | `POST` | Clears all records, users, and uploaded files for clean-state testing |
 
 ---
 
-## Project structure
+## Verification Verdicts
 
-```
-VeriTrace/
-├── backend/
-│   ├── app.py             # Flask REST API and routes
-│   ├── crypto_engine.py   # SHA-256 hashing, Ed25519 signing, chain verification
-│   ├── db.py              # SQLite init and connection handling
-│   ├── ela.py             # Error Level Analysis
-│   ├── requirements.txt
-│   └── uploads/
-├── frontend/
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
-├── demo_assets/
-│   ├── original_photo.jpg
-│   └── tampered_photo.jpg
-├── docs/
-│   ├── architecture.md
-|   ├── 
-|   ├──
-|   └──
-└── README.md
-```
+| Status | Meaning |
+| :--- | :--- |
+| `VERIFIED` | Complete cryptographic integrity. Every signature, timestamp, and hash link is unbroken. |
+| `VERIFIED_REDACTED` | Valid Zero-Knowledge Redaction. Unredacted lines match genesis Merkle root; redacted portions are certified authentic. |
+| `TAMPERED` | Chain broken. Pinpoints exact failure reason: signature mismatch, unauthorized transfer edit, historical rollback, or external alteration. |
+| `UNKNOWN_PROVENANCE` | File ID not registered or custody records missing. |
 
 ---
 
-## Tech stack
+## Tech Stack
 
-| Layer           | Technology               |
-|-----------------|--------------------------|
-| Backend         | Python, Flask            |
-| Cryptography    | `cryptography`, Ed25519  |
-| Hashing         | SHA-256                  |
-| Database        | SQLite                   |
-| Frontend        | HTML, CSS, JavaScript    |
-| Image analysis  | Pillow, NumPy            |
-| File storage    | UUID-based naming        |
-
----
-
-## Limitations
-
-VeriTrace is a research prototype demonstrating the core cryptographic provenance model. Current limitations:
-
-- Private keys are held in application memory (not in a key management service)
-- SQLite database is local, not distributed
-- File storage is local to the server
-- No production-grade authentication or access control
-- ELA is heuristic — not definitive proof of manipulation
-
-Production deployment would require hardened key management, encrypted storage, distributed infrastructure, robust authentication, and audit logging.
-
----
-
-## Potential applications
-
-- Digital forensics and legal evidence management
-- News and media verification workflows
-- Academic and research records
-- Document provenance tracking
-- Incident investigation
-- Secure organizational file handoffs
+- **Backend**: Python 3, Flask, SQLite3
+- **Cryptography**: `cryptography` (Ed25519, PKCS#8 PEM), hashlib (SHA-256), Hybrid PQC simulation
+- **Timestamping**: RFC 3161 ASN.1 DER token parser & FreeTSA client
+- **Forensics**: NumPy, SciPy (2D-FFT, Block-DCT), Pillow (ELA)
+- **Frontend**: Vanilla JavaScript (ES6+), Modern Semantic HTML5, Custom Forensic CSS Design System
+- **Testing**: End-to-end integration test suites across multi-hop custody lifecycles
