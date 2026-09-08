@@ -36,16 +36,10 @@ function fmtIST(dateInput) {
 }
 
 function fileIcon(filename) {
-  if (!filename) return "📄";
+  if (!filename) return "[FILE]";
   const ext = filename.split(".").pop().toLowerCase();
-  const map = {
-    jpg: "🖼", jpeg: "🖼", png: "🖼", gif: "🖼", webp: "🖼", svg: "🖼",
-    pdf: "📑", mp4: "🎬", mov: "🎬", avi: "🎬", mkv: "🎬",
-    txt: "📝", doc: "📝", docx: "📝", md: "📝",
-    json: "📋", xml: "📋", csv: "📊",
-    zip: "📦", tar: "📦", gz: "📦", rar: "📦"
-  };
-  return map[ext] || "📄";
+  const validExts = ["jpg", "jpeg", "png", "webp", "gif", "svg", "pdf", "mp4", "mov", "txt", "doc", "docx", "md", "json", "csv", "zip"];
+  return validExts.includes(ext) ? `[${ext.toUpperCase()}]` : "[DATA]";
 }
 
 function escHtml(str) {
@@ -111,7 +105,7 @@ async function copyText(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
     const orig = btn.textContent;
-    btn.textContent = "✓";
+    btn.textContent = "COPIED";
     btn.classList.add("copied");
     setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied"); }, 2000);
   } catch {}
@@ -267,15 +261,11 @@ async function loadStats() {
 function initTicker() {
   const el = $("hero-ticker");
   if (!el) return;
-  const hex = "0123456789abcdef";
-  const rnd = n => Array.from({ length: n }, () => hex[Math.floor(Math.random() * 16)]).join("");
-  const seg = Array.from({ length: 10 }, () => `SHA-256: ${rnd(64)}`).join("   ·   ");
-  // Duplicate for seamless loop
-  el.textContent = seg + "   ·   " + seg;
+  el.textContent = "";
 }
 
 // ── Demo quickfill ─────────────────────────────────────────────
-$("btn-quick-demo").addEventListener("click", async () => {
+if ($("btn-quick-demo")) $("btn-quick-demo").addEventListener("click", async () => {
   setLoading("btn-quick-demo", true);
   try {
     const existing = await fetch(`${API}/users`).then(r => r.json()).catch(() => []);
@@ -292,7 +282,7 @@ $("btn-quick-demo").addEventListener("click", async () => {
           body: JSON.stringify({ name })
         });
       }
-      toast(`✅ Created: ${toCreate.join(", ")} — now upload a file!`, "success", 4000);
+      toast(`Created custodians: ${toCreate.join(", ")} — ready to register assets`, "success", 4000);
     }
     await loadStats();
     document.querySelector('[data-screen="upload"]').click();
@@ -322,7 +312,7 @@ async function handleResetSystem() {
 
       if ($("upload-file")) $("upload-file").value = "";
       if ($("upload-filename")) $("upload-filename").textContent = "";
-      if ($("upload-sha-preview")) $("upload-sha-preview").classList.add("hidden");
+      if ($("sha-preview")) $("sha-preview").classList.add("hidden");
       if ($("upload-result")) $("upload-result").classList.add("hidden");
 
       if ($("tl-file-id")) $("tl-file-id").value = "";
@@ -347,7 +337,7 @@ async function handleResetSystem() {
       await loadUsers();
       await loadUploadedFiles();
 
-      toast("🔄 System reset! All files and records cleared. Ready to redo.", "success", 4000);
+      toast("System reset complete. All files and records cleared.", "success", 4000);
       document.querySelector('[data-screen="register"]').click();
     } else {
       toast("Reset failed: " + (res.error || "Unknown error"), "error");
@@ -376,11 +366,9 @@ async function loadUsers() {
       <div class="user-chip ${activeUser?.user_id === u.id ? "selected" : ""}"
            onclick="selectUser('${u.id}','${u.name}')" data-uid="${u.id}">
         <div style="flex:1;min-width:0">
-          <div class="user-chip-name">👤 ${u.name}</div>
-          <div class="user-chip-id">${u.id}</div>
-          ${u.public_key ? `<div style="font-size:10px;color:var(--vt-cyan);font-family:var(--font-mono);margin-top:2px" title="${u.public_key}">🔑 Public Key: ${u.public_key.slice(0, 16)}…</div>` : ""}
+          <div class="user-chip-name">${u.name}</div>
         </div>
-        <span style="font-size:11px;color:var(--vt-muted)">Click to use →</span>
+        <span class="user-chip-action">Select</span>
       </div>
     `).join("");
   } catch {
@@ -461,9 +449,8 @@ async function loadFiles() {
         <span class="file-chip-icon">${fileIcon(f.original_filename)}</span>
         <div style="flex:1;min-width:0">
           <div class="file-chip-name">${f.original_filename}</div>
-          <div class="file-chip-id">${f.id}</div>
         </div>
-        <span style="font-size:11px;color:var(--vt-muted);flex-shrink:0">Use →</span>
+        <span class="file-chip-action">Inspect</span>
       </div>
     `).join("");
   } catch {
@@ -494,9 +481,17 @@ async function loadFilesInto(selectId) {
 
 function useFileId(id) {
   activeFileId = id;
-  $("tl-file-id").value    = id;
-  $("verify-file-id").value = id;
-  document.querySelector('[data-screen="timeline"]').click();
+  if ($("tl-file-id")) $("tl-file-id").value = id;
+  if ($("verify-file-id")) $("verify-file-id").value = id;
+  document.querySelectorAll(".file-chip").forEach(c => {
+    if (c.getAttribute("onclick") && c.getAttribute("onclick").includes(id)) {
+      c.classList.add("selected");
+    } else {
+      c.classList.remove("selected");
+    }
+  });
+  const tlTab = document.querySelector('[data-screen="timeline"]');
+  if (tlTab) tlTab.click();
   toast("File selected — loading timeline…", "info", 2000);
 }
 
@@ -589,7 +584,7 @@ async function loadHistory(fileId) {
           <div class="hop-header">
             <span class="hop-number">#${String(i + 1).padStart(2, "0")}</span>
             <span class="hop-action ${h.action_type}">${h.action_type}</span>
-            <span class="hop-actor">👤 ${h.actor_name || h.actor_id}</span>
+            <span class="hop-actor">${h.actor_name || h.actor_id}</span>
             ${deltaLabel ? `<span class="hop-delta ${deltaClass}">${deltaLabel}</span>` : ""}
             <span class="hop-time">${fmtTime(h.timestamp)}</span>
           </div>
@@ -597,13 +592,13 @@ async function loadHistory(fileId) {
             <div class="hop-field">
               <span class="hop-field-label">Content Hash</span>
               <span class="hop-field-val">${h.file_content_hash}
-                <button class="btn-copy" onclick="copyText('${safeHash}',this)">⎘</button>
+                <button class="btn-copy" onclick="copyText('${safeHash}',this)">Copy</button>
               </span>
             </div>
             <div class="hop-field">
               <span class="hop-field-label">Record Hash</span>
               <span class="hop-field-val">${h.record_hash}
-                <button class="btn-copy" onclick="copyText('${safeRec}',this)">⎘</button>
+                <button class="btn-copy" onclick="copyText('${safeRec}',this)">Copy</button>
               </span>
             </div>
             <div class="hop-field">
@@ -611,40 +606,40 @@ async function loadHistory(fileId) {
               <span class="hop-field-val">${
                 h.prev_record_hash
                   ? h.prev_record_hash
-                  : '<em style="color:var(--vt-muted)">genesis — none</em>'
+                  : '<em style="color:var(--vt-subdued)">genesis — none</em>'
               }</span>
             </div>
             ${h.declared_transformation ? `
             <div class="hop-field">
               <span class="hop-field-label">Transformation</span>
-              <span class="hop-field-val" style="color:var(--vt-yellow)">${h.declared_transformation}</span>
+              <span class="hop-field-val" style="color:var(--vt-amber)">${h.declared_transformation}</span>
             </div>` : ""}
             ${(h.metadata && h.metadata.editorial_manifest) ? `
             <div class="hop-field">
-              <span class="hop-field-label">Editorial Manifest</span>
+              <span class="hop-field-label">Manifest</span>
               <span class="hop-field-val" style="color:var(--vt-cyan)">
-                ✂️ Authorized Newsroom Transformation (Version ${h.metadata.editorial_manifest.version || "1.0"})
+                [EDITORIAL MANIFEST] Authorized Newsroom Transformation (v${h.metadata.editorial_manifest.version || "1.0"})
               </span>
             </div>` : ""}
             ${(h.tsa_certified_ist || h.tsa_certified_utc) ? `
             <div class="hop-field">
               <span class="hop-field-label">RFC 3161 TSA</span>
               <span class="hop-field-val" style="color:var(--vt-cyan)">
-                ⏱️ ${h.tsa_certified_ist || fmtIST(h.tsa_certified_utc)} · <span style="font-size:11px;color:#a5f3fc">${(h.tsa_cert_info && (h.tsa_cert_info.tsa_common_name || h.tsa_cert_info.tsa_org)) || "TSA Signer"} (Cert: ${(h.tsa_cert_info && h.tsa_cert_info.cert_serial_hex) ? h.tsa_cert_info.cert_serial_hex.slice(0, 10) + '…' : 'Verified'})</span>
+                [TSA CERTIFIED] ${h.tsa_certified_ist || fmtIST(h.tsa_certified_utc)} · <span style="font-size:11px;color:#a5f3fc">${(h.tsa_cert_info && (h.tsa_cert_info.tsa_common_name || h.tsa_cert_info.tsa_org)) || "TSA Signer"} (Cert: ${(h.tsa_cert_info && h.tsa_cert_info.cert_serial_hex) ? h.tsa_cert_info.cert_serial_hex.slice(0, 10) + '…' : 'Verified'})</span>
               </span>
             </div>` : ""}
             <div class="hop-field">
-              <span class="hop-field-label">Record Signature</span>
-              <span class="hop-field-val sig-valid">✅ ${h.signature.slice(0, 32)}…
-                <button class="btn-copy" onclick="copyText('${safeSig}',this)">⎘ full</button>
+              <span class="hop-field-label">Signature</span>
+              <span class="hop-field-val sig-valid"><span class="sig-status">[SIG-OK]</span> ${h.signature.slice(0, 32)}…
+                <button class="btn-copy" onclick="copyText('${safeSig}',this)">Copy Full</button>
               </span>
             </div>
             ${h.actor_public_key ? `
             <div class="hop-field">
-              <span class="hop-field-label">Signer Public Key</span>
+              <span class="hop-field-label">Public Key</span>
               <span class="hop-field-val" style="color:var(--vt-cyan);font-family:var(--font-mono)">
-                🔑 ${h.actor_public_key.slice(0, 32)}…
-                <button class="btn-copy" onclick="copyText('${h.actor_public_key.replace(/'/g, "")}',this)">⎘ full</button>
+                ${h.actor_public_key.slice(0, 32)}…
+                <button class="btn-copy" onclick="copyText('${h.actor_public_key.replace(/'/g, "")}',this)">Copy Full</button>
               </span>
             </div>` : ""}
           </div>
@@ -795,7 +790,7 @@ $("btn-verify").addEventListener("click", async () => {
     }
   } catch (e) {
     $("verdict-wrap").classList.remove("hidden");
-    $("verdict-badge").textContent = `⚠️ Network error: ${e.message}`;
+    $("verdict-badge").textContent = `[ERROR] Network error: ${e.message}`;
     $("verdict-badge").className = "badge badge-unknown";
     toast(`Network error: ${e.message}`, "error");
   } finally {
@@ -814,9 +809,9 @@ function renderVerdict(result) {
     const vHash = result.target_hash || result.current_hash ? `${(result.target_hash || result.current_hash).slice(0, 10)}…${(result.target_hash || result.current_hash).slice(-6)}` : "";
     let compHtml = "";
     if (result.evaluated_latest_filename && result.evaluated_latest_filename !== vName) {
-      compHtml = ` &nbsp;·&nbsp; <span style="color:var(--vt-accent-cyan)">Compared vs Last System File: <code>${escHtml(result.evaluated_latest_filename)}</code></span>`;
+      compHtml = ` &nbsp;·&nbsp; <span style="color:var(--vt-cyan)">Compared vs Last System File: <code>${escHtml(result.evaluated_latest_filename)}</code></span>`;
     }
-    $("verdict-subject").innerHTML = `📁 <strong>Target Evaluated:</strong> <span style="color:#fff">${escHtml(vName)}</span> &nbsp;·&nbsp; <strong>SHA-256:</strong> <code>${vHash}</code>${compHtml}`;
+    $("verdict-subject").innerHTML = `<strong>Target Evaluated:</strong> <span style="color:#fff">${escHtml(vName)}</span> &nbsp;·&nbsp; <strong>SHA-256:</strong> <code>${vHash}</code>${compHtml}`;
   }
 
   const isImg = Boolean(result.is_image);
@@ -834,10 +829,12 @@ function renderVerdict(result) {
       const modHopsText = (result.modified_hops && result.modified_hops.length > 0)
         ? ` · Altered at hop #${result.modified_hops.join(", #")}`
         : " · Content Altered from Genesis";
-      badge.textContent = `⚠️ VERIFIED (CONTENT MODIFIED) — ${n} custody hop${n > 1 ? "s" : ""}${modHopsText}`;
+      badge.textContent = `[VERIFIED: CONTENT MODIFIED] — ${n} custody hop${n > 1 ? "s" : ""}${modHopsText}`;
       badge.className = "badge";
-      badge.style.backgroundColor = "#d97706";
-      badge.style.color = "#ffffff";
+      badge.style.backgroundColor = "var(--vt-amber-subtle)";
+      badge.style.borderColor = "var(--vt-amber-border)";
+      badge.style.color = "var(--vt-amber)";
+      badge.style.boxShadow = "";
       const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
       detail.innerHTML =
         `<strong>Cryptographic Chain Intact · Content Modified from Genesis:</strong> ` +
@@ -845,10 +842,12 @@ function renderVerdict(result) {
         `Granular modifications, differences, and forensic scans are detailed below.` +
         (actors ? `<br/><strong>Chain Custodians:</strong> ${escHtml(actors)}` : "");
     } else {
-      badge.textContent = `✅ VERIFIED (UNMODIFIED) — ${n} custody hop${n > 1 ? "s" : ""} confirmed`;
+      badge.textContent = `[VERIFIED: UNMODIFIED] — ${n} custody hop${n > 1 ? "s" : ""} confirmed`;
       badge.classList.add("badge-verified");
       badge.style.backgroundColor = "";
+      badge.style.borderColor = "";
       badge.style.color = "";
+      badge.style.boxShadow = "";
       const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
       detail.textContent =
         `The complete chain of custody is cryptographically intact. ` +
@@ -859,10 +858,12 @@ function renderVerdict(result) {
 
   } else if (result.status === "VERIFIED_REDACTED") {
     const n = result.hops;
-    badge.textContent = `🛡️ VERIFIED (AUTHENTIC REDACTION) — ${n} hop${n > 1 ? "s" : ""} confirmed`;
-    badge.classList.add("badge-verified");
-    badge.style.backgroundColor = "#2563eb";
-    badge.style.color = "#ffffff";
+    badge.textContent = `[VERIFIED: AUTHENTIC REDACTION] — ${n} hop${n > 1 ? "s" : ""} confirmed`;
+    badge.className = "badge";
+    badge.style.backgroundColor = "var(--vt-purple-subtle)";
+    badge.style.borderColor = "var(--vt-purple-border)";
+    badge.style.color = "var(--vt-purple)";
+    badge.style.boxShadow = "";
     const redactedInfo = result.redacted_segments?.length ? ` Redacted sections: ${result.redacted_segments.join(", ")}.` : "";
     detail.innerHTML =
       `<strong>Zero-Knowledge Redaction Confirmed:</strong> ${result.message || "Authentic redaction verified."}` +
@@ -870,10 +871,12 @@ function renderVerdict(result) {
 
   } else if (result.status === "VERIFIED_EDITORIAL_TRANSFORM") {
     const n = result.hops;
-    badge.textContent = `🛡️ VERIFIED (AUTHORIZED EDITORIAL TRANSFORMATION) — ${n} hop${n > 1 ? "s" : ""} confirmed`;
+    badge.textContent = `[VERIFIED: AUTHORIZED EDITORIAL TRANSFORM] — ${n} hop${n > 1 ? "s" : ""} confirmed`;
     badge.className = "badge badge-editorial";
     badge.style.backgroundColor = "";
+    badge.style.borderColor = "";
     badge.style.color = "";
+    badge.style.boxShadow = "";
     const actors = result.unique_actors?.map(a => a.name).join(" → ") || "";
     detail.innerHTML =
       `<strong>Authorized Newsroom Modification Confirmed:</strong> ` +
@@ -886,22 +889,26 @@ function renderVerdict(result) {
     const actor  = result.actor_name || result.actor_id || "unknown";
     if (result.tamper_type === "CONTENT_FORGERY_DETECTED") {
       const pct = result.forgery_percent !== undefined ? result.forgery_percent : ((result.forgery_ratio || 0) * 100).toFixed(1);
-      badge.textContent = `🚨 TAMPERED — Content Forgery Detected (${pct}% Altered Area ≥ 15% Red-Line)`;
+      badge.textContent = `[TAMPERED: CONTENT FORGERY] (${pct}% Altered Area ≥ 15% Threshold)`;
     } else if (result.tamper_type === "UNAUTHORIZED_SEMANTIC_ALTERATION") {
       const pct = result.forgery_percent !== undefined ? result.forgery_percent : ((result.forgery_ratio || 0) * 100).toFixed(1);
-      badge.textContent = `🚨 TAMPERED — Unauthorized Alteration (${pct}% Surface Delta)`;
+      badge.textContent = `[TAMPERED: UNAUTHORIZED ALTERATION] (${pct}% Surface Delta)`;
     } else if (result.tamper_type === "EXTERNAL_MODIFICATION") {
-      badge.textContent = `🚨 TAMPERED — External file alteration (differs from final hop #${String(hop).padStart(2, "0")})`;
+      badge.textContent = `[TAMPERED: EXTERNAL ALTERATION] (Differs from final hop #${String(hop).padStart(2, "0")})`;
     } else if (result.tamper_type === "HISTORICAL_ROLLBACK") {
-      badge.textContent = `🚨 TAMPERED — Rollback / Stale Version at hop #${String(hop).padStart(2, "0")}`;
+      badge.textContent = `[TAMPERED: STALE / ROLLBACK VERSION] (Hop #${String(hop).padStart(2, "0")})`;
     } else {
-      badge.textContent = `🚨 TAMPERED — broken at hop #${String(hop).padStart(2, "0")}`;
+      badge.textContent = `[TAMPERED] — Broken at hop #${String(hop).padStart(2, "0")}`;
     }
     badge.classList.add("badge-tampered");
+    badge.style.backgroundColor = "";
+    badge.style.borderColor = "";
+    badge.style.color = "";
+    badge.style.boxShadow = "";
     
     let segText = "";
     if (!isImg && result.tampered_segments && result.tampered_segments.length > 0) {
-      segText = `<br/><strong style="color:var(--vt-red)">🔍 Granular Alteration Localization:</strong><ul style="margin:4px 0 0 18px;text-align:left">${result.tampered_segments.map(s => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
+      segText = `<br/><strong style="color:var(--vt-coral)">[LOCALIZATION] Granular Alteration:</strong><ul style="margin:4px 0 0 18px;text-align:left">${result.tampered_segments.map(s => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
     }
     
     detail.innerHTML = `<strong>Root Cause:</strong> ${escHtml(result.reason)}. <br/><strong>Signer/Custodian at Hop #${hop}:</strong> ${escHtml(actor)}.${segText}`;
@@ -913,11 +920,14 @@ function renderVerdict(result) {
       $("hash-compare").classList.remove("hidden");
     }
 
-    toast(`🚨 TAMPERED — chain broken at hop #${hop} (${actor})`, "error", 6000);
+    toast(`[TAMPERED] Chain broken at hop #${hop} (${actor})`, "error", 6000);
 
   } else {
-    badge.textContent = `⚠️ UNKNOWN PROVENANCE`;
+    badge.textContent = `[UNKNOWN PROVENANCE]`;
     badge.classList.add("badge-unknown");
+    badge.style.backgroundColor = "";
+    badge.style.borderColor = "";
+    badge.style.color = "";
     detail.textContent = result.reason || "No custody history found for this File ID.";
     toast("Unknown provenance — no records found.", "error");
   }
@@ -1018,37 +1028,38 @@ function renderVerdict(result) {
         if (gaugeVal) gaugeVal.style.color = "var(--vt-red)";
         editWrap.style.borderLeftColor = "var(--vt-red)";
         if (statusPill) {
-          statusPill.textContent = result.tamper_type === "CONTENT_FORGERY_DETECTED" ? "🚨 CONTENT FORGERY (≥ 15%)" : "🚨 TAMPERED / UNAUTHORIZED ALTERATION";
+          statusPill.textContent = result.tamper_type === "CONTENT_FORGERY_DETECTED" ? "[CONTENT FORGERY ≥ 15%]" : "[TAMPERED / UNAUTHORIZED ALTERATION]";
           statusPill.className = "badge badge-tampered";
           statusPill.style.backgroundColor = "";
           statusPill.style.color = "";
         }
       } else if (result.status === "VERIFIED_EDITORIAL_TRANSFORM") {
-        gaugeBar.style.backgroundColor = "#10b981";
-        if (gaugeVal) gaugeVal.style.color = "#34d399";
+        gaugeBar.style.backgroundColor = "var(--vt-cyan)";
+        if (gaugeVal) gaugeVal.style.color = "var(--vt-cyan)";
         editWrap.style.borderLeftColor = "var(--vt-cyan)";
         if (statusPill) {
-          statusPill.textContent = "🛡️ AUTHORIZED EDITORIAL TRANSFORM";
+          statusPill.textContent = "[AUTHORIZED EDITORIAL TRANSFORM]";
           statusPill.className = "badge badge-editorial";
           statusPill.style.backgroundColor = "";
           statusPill.style.color = "";
         }
       } else if (result.is_modified_from_genesis || forgeryPct > 0) {
-        gaugeBar.style.backgroundColor = "#f59e0b";
-        if (gaugeVal) gaugeVal.style.color = "#f59e0b";
-        editWrap.style.borderLeftColor = "#f59e0b";
+        gaugeBar.style.backgroundColor = "var(--vt-amber)";
+        if (gaugeVal) gaugeVal.style.color = "var(--vt-amber)";
+        editWrap.style.borderLeftColor = "var(--vt-amber)";
         if (statusPill) {
-          statusPill.textContent = `⚠️ IMAGE CONTENT MODIFIED (${forgeryPct.toFixed(1)}% Altered Area)`;
-          statusPill.className = "badge badge-unknown";
-          statusPill.style.backgroundColor = "#d97706";
-          statusPill.style.color = "#ffffff";
+          statusPill.textContent = `[IMAGE CONTENT MODIFIED: ${forgeryPct.toFixed(1)}% Surface Area]`;
+          statusPill.className = "badge";
+          statusPill.style.backgroundColor = "var(--vt-amber-subtle)";
+          statusPill.style.borderColor = "var(--vt-amber-border)";
+          statusPill.style.color = "var(--vt-amber)";
         }
       } else {
-        gaugeBar.style.backgroundColor = "#10b981";
-        if (gaugeVal) gaugeVal.style.color = "#34d399";
-        editWrap.style.borderLeftColor = "var(--vt-cyan)";
+        gaugeBar.style.backgroundColor = "var(--vt-volt)";
+        if (gaugeVal) gaugeVal.style.color = "var(--vt-volt)";
+        editWrap.style.borderLeftColor = "var(--vt-volt)";
         if (statusPill) {
-          statusPill.textContent = "✅ UNMODIFIED IMAGE";
+          statusPill.textContent = "[UNMODIFIED IMAGE]";
           statusPill.className = "badge badge-verified";
           statusPill.style.backgroundColor = "";
           statusPill.style.color = "";
@@ -1161,25 +1172,27 @@ async function loadVerifyChain(fileId, verifyResult) {
       if (isTampered && brokenAt !== null && i === brokenAt) {
         rowClass += " vct-broken";
         if (verifyResult.tamper_type === "EXTERNAL_MODIFICATION") {
-          statusHtml = `<span style="color:var(--vt-yellow);font-weight:700">⚠ Modified Outside Chain</span>`;
+          statusHtml = `<span style="color:var(--vt-amber);font-weight:700">[MODIFIED OUTSIDE CHAIN]</span>`;
         } else {
-          statusHtml = `<span style="color:var(--vt-red);font-weight:700">🔴 BROKEN / TAMPERED</span>`;
+          statusHtml = `<span style="color:var(--vt-coral);font-weight:700">[TAMPERED]</span>`;
         }
       } else if (isTampered && brokenAt !== null && i > brokenAt) {
         rowClass += " vct-after";
-        statusHtml = `<span style="color:var(--vt-muted)">⚪ —</span>`;
+        statusHtml = `<span style="color:var(--vt-subdued)">—</span>`;
       } else {
         // Authenticated hop on ledger
         if (h.action_type === "CREATE") {
-          statusHtml = `<span style="color:var(--vt-green)">✅ Genesis Original</span>`;
+          statusHtml = `<span style="color:var(--vt-emerald);font-weight:600">[GENESIS ORIGINAL]</span>`;
         } else if (h.action_type === "MODIFY") {
-          statusHtml = `<span style="color:var(--vt-yellow);font-weight:600">⚠️ Content Modified</span>`;
+          statusHtml = `<span style="color:var(--vt-amber);font-weight:600">[CONTENT MODIFIED]</span>`;
+        } else if (h.action_type === "EDITORIAL_TRANSFORM") {
+          statusHtml = `<span style="color:var(--vt-cyan);font-weight:600">[EDITORIAL TRANSFORM]</span>`;
         } else if (h.action_type === "REDACT") {
-          statusHtml = `<span style="color:#60a5fa;font-weight:600">🛡️ Authentic Redaction</span>`;
+          statusHtml = `<span style="color:var(--vt-purple);font-weight:600">[AUTHENTIC REDACTION]</span>`;
         } else if (h.action_type === "TRANSFER") {
-          statusHtml = `<span style="color:var(--vt-green)">✅ Custody Transferred</span>`;
+          statusHtml = `<span style="color:var(--vt-emerald);font-weight:600">[CUSTODY TRANSFERRED]</span>`;
         } else {
-          statusHtml = `<span style="color:var(--vt-green)">✅ Valid in Ledger</span>`;
+          statusHtml = `<span style="color:var(--vt-emerald);font-weight:600">[VALID IN LEDGER]</span>`;
         }
       }
 
@@ -1194,7 +1207,7 @@ async function loadVerifyChain(fileId, verifyResult) {
         const timeDisplay = h.tsa_certified_ist || fmtIST(h.tsa_certified_utc);
         tsaBadge = `
           <div style="font-size:11px;color:var(--vt-cyan);margin-top:2px" title="TSA Cert Serial: ${cert.cert_serial_hex || 'N/A'}, Issuer: ${cert.issuer_org || cert.issuer_common_name || 'Root CA'}">
-            ⏱️ <strong>TSA Certified:</strong> ${timeDisplay} · <span style="color:#a5f3fc">${tsaName}${certSerial}</span>
+            [TSA CERTIFIED] ${timeDisplay} · <span style="color:#a5f3fc">${tsaName}${certSerial}</span>
           </div>`;
       }
 
@@ -1202,7 +1215,7 @@ async function loadVerifyChain(fileId, verifyResult) {
         <div class="${rowClass}">
           <span class="vct-num">#${String(i + 1).padStart(2, "0")}</span>
           <span class="vct-action ${h.action_type}">${h.action_type}</span>
-          <span class="vct-actor">👤 ${h.actor_name || h.actor_id} ${tsaBadge}</span>
+          <span class="vct-actor">${h.actor_name || h.actor_id} ${tsaBadge}</span>
           <span class="vct-hash" title="${h.file_content_hash}">${h.file_content_hash.slice(0, 10)}…${h.file_content_hash.slice(-6)}</span>
           <span class="vct-status">${statusHtml}</span>
           ${isBreak ? `<div class="vct-reason">↑ ${verifyResult.reason}</div>` : ""}

@@ -3,483 +3,543 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VERITRACE — Cryptographic Chain of Custody</title>
-  <meta name="description" content="VERITRACE: SHA-256 + Ed25519 cryptographic chain-of-custody for digital files. VERIFIED or TAMPERED — not a probability." />
-  <meta name="keywords" content="digital provenance, chain of custody, cryptographic verification, SHA-256, Ed25519, tamper detection, file integrity, digital forensics" />
+  <title>VERITRACE — Digital Provenance & Forensic Workstation</title>
+  <meta name="description" content="VERITRACE: SHA-256 + PQC Hybrid Ed25519/ML-DSA cryptographic chain-of-custody for digital files." />
+  <meta name="keywords" content="digital provenance, chain of custody, cryptographic verification, SHA-256, Ed25519, ML-DSA, tamper detection, file integrity, digital forensics" />
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
     rel="stylesheet"
   />
 
-  <!-- Theme -->
+  <!-- Forensic Workstation Stylesheet -->
+  <link rel="icon" type="image/png" href="logo.png" />
   <link rel="stylesheet" href="veritrace.css" />
 </head>
 <body>
   <div class="vt-app">
-    <div class="vt-bg" aria-hidden="true"></div>
 
     <!-- ══════════════════════════════════════════════════════════
-         HERO SECTION
+         OPERATIONS & TELEMETRY COMMAND HEADER
          ══════════════════════════════════════════════════════════ -->
-    <section class="hero" id="hero">
-      <div class="hero-badge">
-        <span class="hero-badge-dot"></span>
-        Amrita Cyber Nation · PS03 — The Last Original · Team RocksHack
-      </div>
-
-      <h1 class="hero-title">VERI<span class="hero-title-accent">TRACE</span></h1>
-      <p class="hero-tagline">Cryptographic Chain-of-Custody for Digital Files</p>
-      <p class="hero-desc">
-        Not guessing this is fake with a percentage.<br />
-        <strong>Proving it mathematically.</strong>
-      </p>
-
-      <!-- Three pillars -->
-      <div class="hero-pillars">
-        <div class="hero-pillar">
-          <div class="hero-pillar-icon">⬡</div>
-          <div class="hero-pillar-name">SHA-256</div>
-          <div class="hero-pillar-desc">Content Identity</div>
+    <header class="ops-header" id="hero">
+      <div class="ops-top">
+        <div class="ops-brand">
+          <img src="logo.png" alt="VeriTrace Logo" class="ops-logo-img" />
+          <div class="ops-title-row">
+            <span class="ops-title">VERI<span class="ops-title-accent">TRACE</span></span>
+            <span class="ops-title-sep">//</span>
+            <span class="ops-tagline">Cryptographic Chain of Custody &amp; Forensic Verification</span>
+          </div>
         </div>
-        <div class="hero-pillar-sep">+</div>
-        <div class="hero-pillar">
-          <div class="hero-pillar-icon">🔑</div>
-          <div class="hero-pillar-name">PQC Hybrid (Ed25519 + ML-DSA)</div>
-          <div class="hero-pillar-desc">Post-Quantum Signatures</div>
-        </div>
-        <div class="hero-pillar-sep">+</div>
-        <div class="hero-pillar">
-          <div class="hero-pillar-icon">⛓</div>
-          <div class="hero-pillar-name">Merkle Hash Chain</div>
-          <div class="hero-pillar-desc">Segment Tamper Localization</div>
+
+        <div class="ops-controls">
+          <div class="ops-status-pill">
+            <span class="status-dot"></span>
+            <span>SYSTEM ONLINE</span>
+          </div>
         </div>
       </div>
 
-      <!-- Live stats -->
-      <div class="hero-stats" id="hero-stats">
-        <div class="hero-stat">
-          <span class="hero-stat-num" id="stat-files">—</span>
-          <span class="hero-stat-label">Files Tracked</span>
+      <!-- Telemetry Counter Metrics Strip -->
+      <div class="ops-telemetry" id="hero-stats">
+        <div class="telemetry-cell">
+          <span class="telemetry-val" id="stat-files">0</span>
+          <span class="telemetry-label">Registered Assets</span>
         </div>
-        <div class="hero-stat-sep">·</div>
-        <div class="hero-stat">
-          <span class="hero-stat-num" id="stat-records">—</span>
-          <span class="hero-stat-label">Custody Records</span>
+        <div class="telemetry-cell">
+          <span class="telemetry-val" id="stat-records">0</span>
+          <span class="telemetry-label">Custody Blocks</span>
         </div>
-        <div class="hero-stat-sep">·</div>
-        <div class="hero-stat">
-          <span class="hero-stat-num" id="stat-custodians">—</span>
-          <span class="hero-stat-label">Active Custodians</span>
+        <div class="telemetry-cell">
+          <span class="telemetry-val" id="stat-custodians">0</span>
+          <span class="telemetry-label">Authorized Custodians</span>
+        </div>
+        <div class="telemetry-cell">
+          <span class="telemetry-val" style="font-size:1.25rem">PQC HYBRID</span>
+          <span class="telemetry-label">Signature Scheme</span>
         </div>
       </div>
 
-      <!-- CTAs -->
-      <div class="hero-actions">
-        <button class="btn btn-primary hero-cta" id="btn-quick-demo">⚡ Quick Demo Setup</button>
-        <button class="btn btn-secondary hero-cta" id="btn-reset-demo" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;background:rgba(239,68,68,0.1)">🗑️ Reset All & Redo</button>
-        <button class="btn btn-ghost" onclick="document.querySelector('.nav').scrollIntoView({behavior:'smooth'})">Explore System ↓</button>
-      </div>
 
-      <!-- Rolling hash ticker -->
-      <div class="hero-hash-ticker" aria-hidden="true">
-        <span id="hero-ticker"></span>
-      </div>
-    </section>
+    </header>
 
     <!-- ══════════════════════════════════════════════════════════
-         TOP NAV
+         WORKSTATION NAVIGATION TOOLBAR
          ══════════════════════════════════════════════════════════ -->
     <nav class="nav">
       <div class="nav-brand">
-        <span class="nav-logo">⬡</span>
-        <span class="nav-name">VERITRACE</span>
+        <img src="logo.png" alt="VeriTrace" class="nav-logo-img" />
+        <span class="nav-tag">// WORKSPACE</span>
       </div>
+
       <div class="nav-tabs">
         <button class="nav-tab active" data-screen="register" id="tab-register">
-          <span class="nav-tab-step">01</span>Register
+          <span class="nav-tab-step">01</span>Identity
         </button>
         <button class="nav-tab" data-screen="upload" id="tab-upload">
-          <span class="nav-tab-step">02</span>Upload
+          <span class="nav-tab-step">02</span>Genesis
         </button>
         <button class="nav-tab" data-screen="timeline" id="tab-timeline">
-          <span class="nav-tab-step">03</span>Timeline
+          <span class="nav-tab-step">03</span>Custody
         </button>
         <button class="nav-tab" data-screen="verify" id="tab-verify">
-          <span class="nav-tab-step">04</span>Verify
+          <span class="nav-tab-step">04</span>Verification
         </button>
       </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div class="nav-user" id="nav-user">No user selected</div>
-        <button class="btn btn-ghost" id="btn-nav-reset" title="Reset all data & redo" style="padding:4px 10px;font-size:12px;color:#f87171;border:1px solid rgba(248,113,113,0.3)">↺ Reset</button>
+
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="nav-user" id="nav-user">No active custodian</div>
+        <button class="btn btn-ghost" id="btn-nav-reset" title="Reset all data & redo">Reset Ledger</button>
       </div>
     </nav>
 
     <!-- ══════════════════════════════════════════════════════════
-         SCREEN 1 — REGISTER
+         SCREEN 1 — REGISTER CUSTODIAN (MULTI-PANE)
          ══════════════════════════════════════════════════════════ -->
     <section class="screen active" id="screen-register">
       <div class="screen-header">
-        <span class="screen-eyebrow">Identity · 01</span>
-        <h1>Register Custodian</h1>
-        <p class="screen-sub">
-          Create a cryptographic identity. Each custodian receives a unique
-          Ed25519 keypair. The private key signs custody records; the public key
-          is stored in the registry for signature verification during chain replay.
-        </p>
+        <span class="screen-eyebrow">01 · IDENTITY REGISTRY</span>
+        <h1>Cryptographic Custodians</h1>
+        <p class="screen-sub">Generate asymmetric Ed25519 keypairs for custodian entities to sign custody transitions and register public keys.</p>
       </div>
 
-      <div class="card">
-        <div class="form-group">
-          <label for="reg-name">Custodian Name</label>
-          <input type="text" id="reg-name" placeholder="e.g. Reporter, Editor, Publisher" />
-        </div>
-        <button class="btn btn-primary" id="btn-register">Generate Ed25519 Identity →</button>
-        <div id="reg-result" class="result-box hidden"></div>
+      <div class="workbench-grid workbench-grid-equal">
+        <!-- Left Panel: Keypair Generation Form -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Generate Custodian Keypair</span>
+              <span class="card-badge" style="background:var(--vt-indigo-glass);color:var(--vt-indigo-light)">Ed25519</span>
+            </div>
 
-        <!-- Public key display — shown after registration -->
-        <div class="pk-display hidden" id="pk-display">
-          <div class="pk-label">
-            Ed25519 Public Key
-            <button class="btn-copy" id="btn-copy-pk" onclick="copyEl('pk-val-text', this)">⎘ copy</button>
+            <div class="form-group">
+              <label for="reg-name">Custodian Entity Name / Role</label>
+              <input type="text" id="reg-name" placeholder="e.g. Field Reporter, Lead Forensic Auditor, News Editor" />
+            </div>
+
+            <button class="btn btn-primary" id="btn-register" style="width:100%">Generate Keypair</button>
+            <div id="reg-result" class="result-box hidden"></div>
+
+            <!-- Public key display — shown after registration -->
+            <div class="pk-display hidden" id="pk-display">
+              <div class="pk-label">
+                <span>Ed25519 Public Key</span>
+                <button class="btn-copy" id="btn-copy-pk" onclick="copyEl('pk-val-text', this)">Copy</button>
+              </div>
+              <div class="pk-val" id="pk-val-text"></div>
+            </div>
           </div>
-          <div class="pk-val" id="pk-val-text"></div>
         </div>
-      </div>
 
-      <div class="section-divider">Active Custodians</div>
-      <div class="card">
-        <div id="users-list" class="users-list">
-          <p class="muted">Loading custodians…</p>
+        <!-- Right Panel: Registered Directory -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Custodian Directory</span>
+              <button class="btn btn-ghost" id="btn-refresh-users" style="padding:2px 8px;font-size:0.72rem">Refresh</button>
+            </div>
+
+            <div id="users-list" class="users-list">
+              <p class="muted">Loading custodians…</p>
+            </div>
+          </div>
         </div>
-        <button class="btn btn-ghost" id="btn-refresh-users" style="margin-top:12px">↻ Refresh</button>
       </div>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
-         SCREEN 2 — UPLOAD
+         SCREEN 2 — GENESIS FILE INGESTION (MULTI-PANE)
          ══════════════════════════════════════════════════════════ -->
     <section class="screen" id="screen-upload">
       <div class="screen-header">
-        <span class="screen-eyebrow">Genesis · 02</span>
-        <h1>Register File</h1>
-        <p class="screen-sub">
-          Upload a file to create its first custody record (CREATE hop). A
-          SHA-256 hash and Ed25519 signature are written to the ledger immediately.
-        </p>
+        <span class="screen-eyebrow">02 · GENESIS BLOCK</span>
+        <h1>Asset Genesis Registration</h1>
+        <p class="screen-sub">Ingest original assets, compute client-side SHA-256 digests, and commit genesis records to the immutable ledger.</p>
       </div>
 
-      <div class="card">
-        <div class="form-group">
-          <label for="upload-actor">Acting Custodian</label>
-          <select id="upload-actor">
-            <option value="">— select —</option>
-          </select>
-        </div>
-        <div class="drop-zone" id="upload-dropzone">
-          <div class="drop-icon">📄</div>
-          <p>Drop file here or <span class="drop-link">click to browse</span></p>
-          <input type="file" id="upload-file" class="hidden-input" />
-          <p class="drop-filename" id="upload-filename"></p>
+      <div class="workbench-grid workbench-grid-equal">
+        <!-- Left Panel: Upload Form -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Ingest Original File</span>
+              <span class="card-badge" style="background:var(--vt-emerald-glass);color:var(--vt-emerald-light)">SHA-256</span>
+            </div>
+
+            <div class="form-group">
+              <label for="upload-actor">Authorizing Custodian</label>
+              <select id="upload-actor">
+                <option value="">— select custodian —</option>
+              </select>
+            </div>
+
+            <div class="drop-zone" id="upload-dropzone">
+              <p style="font-weight:600">Select file or <span class="drop-link">browse</span></p>
+              <input type="file" id="upload-file" class="hidden-input" />
+              <p class="drop-filename" id="upload-filename"></p>
+            </div>
+
+            <!-- SHA-256 live preview (computed client-side before upload) -->
+            <div class="sha-preview hidden" id="sha-preview">
+              <span class="sha-preview-label">SHA-256</span>
+              <span class="sha-preview-val" id="sha-preview-val">Computing…</span>
+              <button class="btn-copy" onclick="copyEl('sha-preview-val', this)">Copy</button>
+            </div>
+
+            <button class="btn btn-primary" id="btn-upload" style="width:100%">Commit Asset to Ledger</button>
+            <div id="upload-result" class="result-box hidden"></div>
+          </div>
         </div>
 
-        <!-- SHA-256 live preview (computed client-side before upload) -->
-        <div class="sha-preview hidden" id="sha-preview">
-          <span class="sha-preview-label">SHA-256</span>
-          <span class="sha-preview-val" id="sha-preview-val">Computing…</span>
-          <button class="btn-copy" onclick="copyEl('sha-preview-val', this)">⎘ copy</button>
-        </div>
+        <!-- Right Panel: Registered Files List -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Tracked Assets in Ledger</span>
+              <button class="btn btn-ghost" id="btn-refresh-files" style="padding:2px 8px;font-size:0.72rem">Refresh</button>
+            </div>
 
-        <button class="btn btn-primary" id="btn-upload">Register File →</button>
-        <div id="upload-result" class="result-box hidden"></div>
-      </div>
-
-      <div class="section-divider">Registered Files</div>
-      <div class="card">
-        <div id="files-list" class="files-list">
-          <p class="muted">No files registered yet.</p>
+            <div id="files-list" class="files-list">
+              <p class="muted">No assets registered yet.</p>
+            </div>
+          </div>
         </div>
-        <button class="btn btn-ghost" id="btn-refresh-files" style="margin-top:12px">↻ Refresh</button>
       </div>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
-         SCREEN 3 — TIMELINE
+         SCREEN 3 — CUSTODY CHAIN ACTIONS & TIMELINE (MULTI-PANE)
          ══════════════════════════════════════════════════════════ -->
     <section class="screen" id="screen-timeline">
       <div class="screen-header">
-        <span class="screen-eyebrow">Audit Trail · 03</span>
-        <h1>Custody Timeline</h1>
-        <p class="screen-sub">
-          Full signed audit trail for any registered file — every hop, every
-          actor, every hash, every Ed25519 signature.
-        </p>
+        <span class="screen-eyebrow">03 · AUDIT TRAIL</span>
+        <h1>Custody Chain Actions & Timeline</h1>
+        <p class="screen-sub">Dispatch verifiable custody transfers, editorial transformations, and zero-knowledge redactions with cryptographic signatures.</p>
       </div>
 
-      <div class="card">
-        <div class="form-row">
-          <div class="form-group" style="flex:1">
-            <label for="tl-file-id">File ID</label>
-            <input type="text" id="tl-file-id" placeholder="Paste file UUID or select from Upload screen" class="mono" />
-          </div>
-          <div class="form-group" style="flex:1">
-            <label for="tl-actor">Add Action — Custodian</label>
-            <select id="tl-actor">
-              <option value="">— select —</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group" style="flex:1">
-            <label for="tl-action-type">Action Type</label>
-            <select id="tl-action-type">
-              <option value="TRANSFER">TRANSFER (custody change, same content)</option>
-              <option value="MODIFY">MODIFY (new file version)</option>
-              <option value="EDITORIAL_TRANSFORM">EDITORIAL TRANSFORM (Newsroom Crop / Redaction / Compress)</option>
-              <option value="REDACT">REDACT (Zero-Knowledge Verifiable Redaction)</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex:1">
-            <label for="tl-transform">Declared Transformation (optional)</label>
-            <input type="text" id="tl-transform" placeholder="e.g. web compression, watermark added" />
+      <div class="workbench-grid">
+        <!-- Left Panel: Action Dispatcher & Manifest Builder -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Dispatch Custody Action</span>
+              <span class="card-badge" style="background:var(--vt-amber-glass);color:var(--vt-amber-light)">Transition</span>
+            </div>
+
+            <div class="form-group">
+              <label for="tl-file-id">Asset Identifier (UUID)</label>
+              <input type="text" id="tl-file-id" placeholder="Paste file UUID or select from Genesis screen" class="mono" />
+            </div>
+
+            <div class="form-group">
+              <label for="tl-actor">Acting Custodian</label>
+              <select id="tl-actor">
+                <option value="">— select custodian —</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="tl-action-type">Custody Transition Type</label>
+              <select id="tl-action-type">
+                <option value="TRANSFER">TRANSFER (Custody change, identical content)</option>
+                <option value="MODIFY">MODIFY (New asset version)</option>
+                <option value="EDITORIAL_TRANSFORM">EDITORIAL TRANSFORM (Newsroom Crop / Compression)</option>
+                <option value="REDACT">REDACT (Zero-Knowledge Verifiable Redaction)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="tl-transform">Declared Notes (Optional)</label>
+              <input type="text" id="tl-transform" placeholder="e.g. Editorial crop, color grade, privacy mask" />
+            </div>
+
+            <!-- Editorial Transform Builder -->
+            <div id="tl-editorial-panel" class="hidden" style="margin:10px 0;padding:12px 14px;background:var(--vt-surface-elevated);border:1px solid var(--vt-teal-border);border-radius:var(--radius-xs)">
+              <div style="font-size:0.75rem;font-weight:700;color:var(--vt-teal-light);margin-bottom:8px;font-family:var(--font-mono)">EDITORIAL MANIFEST BUILDER</div>
+              <div class="form-row" style="gap:8px">
+                <div class="form-group" style="flex:1">
+                  <label style="font-size:0.68rem">Crop X</label>
+                  <input type="number" id="manifest-crop-x" placeholder="auto" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label style="font-size:0.68rem">Crop Y</label>
+                  <input type="number" id="manifest-crop-y" placeholder="auto" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label style="font-size:0.68rem">Crop W</label>
+                  <input type="number" id="manifest-crop-w" placeholder="auto" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label style="font-size:0.68rem">Crop H</label>
+                  <input type="number" id="manifest-crop-h" placeholder="auto" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label style="font-size:0.68rem">Quality</label>
+                  <input type="number" id="manifest-quality" value="80" min="1" max="100" />
+                </div>
+              </div>
+              <div class="form-group" style="margin-top:6px">
+                <label style="font-size:0.68rem">Redaction Box (x, y, width, height, reason)</label>
+                <input type="text" id="manifest-redaction-box" placeholder="e.g. 20, 20, 40, 25, Privacy Face Mask" />
+              </div>
+            </div>
+
+            
+
+            <div id="tl-transfer-notice" class="hidden"></div>
+            <div class="drop-zone compact hidden" id="tl-dropzone">
+              <input type="file" id="tl-file" class="hidden-input" />
+              <p id="tl-dropzone-prompt" style="font-size:0.78rem">Drop updated file version here (required for MODIFY / EDITORIAL)</p>
+              <p class="drop-filename" id="tl-filename"></p>
+            </div>
+
+            <div class="form-row" style="gap:10px;margin-top:12px">
+              <button class="btn btn-primary" id="btn-action" style="flex:1">Commit Action</button>
+              <button class="btn btn-secondary" id="btn-load-history" style="flex:1">Load History</button>
+            </div>
+            <div id="action-result" class="result-box hidden"></div>
           </div>
         </div>
 
-        <!-- FC-03-B: Editorial Transform Builder -->
-        <div id="tl-editorial-panel" class="hidden" style="margin:8px 0;padding:12px;background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.25);border-radius:6px">
-          <div style="font-size:12px;font-weight:600;color:var(--vt-cyan);margin-bottom:8px">✂️ Newsroom Editorial Manifest Builder</div>
-          <div class="form-row" style="gap:8px">
-            <div class="form-group" style="flex:1">
-              <label style="font-size:11px">Crop X (px)</label>
-              <input type="number" id="manifest-crop-x" placeholder="auto" style="font-size:12px" />
+        <!-- Right Panel: Cryptographic Audit Trail Explorer -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Cryptographic Audit Trail</span>
+              <span class="card-badge" style="background:var(--vt-emerald-glass);color:var(--vt-emerald-light)">Merkle Links</span>
             </div>
-            <div class="form-group" style="flex:1">
-              <label style="font-size:11px">Crop Y (px)</label>
-              <input type="number" id="manifest-crop-y" placeholder="auto" style="font-size:12px" />
+
+            <!-- Chain stats bar -->
+            <div class="timeline-stats hidden" id="tl-stats">
+              <span>Hops: <span class="tl-stat-val" id="tl-stat-hops">0</span></span>
+              <span class="tl-stat-sep">·</span>
+              <span>Custodians: <span class="tl-stat-val" id="tl-stat-actors">0</span></span>
+              <span class="tl-stat-sep">·</span>
+              <span>Latest Record: <span class="tl-stat-val" id="tl-stat-last">—</span></span>
             </div>
-            <div class="form-group" style="flex:1">
-              <label style="font-size:11px">Crop Width</label>
-              <input type="number" id="manifest-crop-w" placeholder="auto" style="font-size:12px" />
-            </div>
-            <div class="form-group" style="flex:1">
-              <label style="font-size:11px">Crop Height</label>
-              <input type="number" id="manifest-crop-h" placeholder="auto" style="font-size:12px" />
-            </div>
-            <div class="form-group" style="flex:1">
-              <label style="font-size:11px">Target Quality</label>
-              <input type="number" id="manifest-quality" value="80" min="1" max="100" style="font-size:12px" />
+
+            <div id="timeline-container" class="timeline-container">
+              <p class="muted" style="text-align:center;padding:32px 0">Load an asset history to inspect signed hops.</p>
             </div>
           </div>
-          <div class="form-row" style="gap:8px;margin-top:6px">
-            <div class="form-group" style="flex:2">
-              <label style="font-size:11px">Redaction Box (optional: x, y, width, height, reason)</label>
-              <input type="text" id="manifest-redaction-box" placeholder="e.g. 20, 20, 40, 25, Privacy Face Mask" style="font-size:12px" />
-            </div>
-          </div>
-          <p style="font-size:11px;color:var(--vt-muted);margin:4px 0 0 0">
-            ℹ️ Leaving crop coordinates blank activates automatic normalized cross-correlation subwindow discovery.
-          </p>
         </div>
-        <div id="tl-transfer-notice" class="info-notice" style="padding:10px 14px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:6px;font-size:12px;color:#93c5fd;margin:8px 0">
-          🔄 <strong>Custody TRANSFER:</strong> Reassigns custodianship while cryptographically preserving the existing verified file content. No file re-upload required.
-        </div>
-        <div class="drop-zone compact hidden" id="tl-dropzone">
-          <input type="file" id="tl-file" class="hidden-input" />
-          <p id="tl-dropzone-prompt">Drop new / updated file version here (required for MODIFY)</p>
-          <p class="drop-filename" id="tl-filename"></p>
-        </div>
-        <div class="form-row" style="gap:8px">
-          <button class="btn btn-secondary" id="btn-action">Add Custody Record →</button>
-          <button class="btn btn-primary" id="btn-load-history">Load Chain History</button>
-        </div>
-        <div id="action-result" class="result-box hidden"></div>
       </div>
-
-      <!-- Chain stats bar (revealed after history loads) -->
-      <div class="timeline-stats hidden" id="tl-stats">
-        <span class="tl-stat-item">⛓ <span class="tl-stat-val" id="tl-stat-hops">0</span> hops</span>
-        <span class="tl-stat-sep">·</span>
-        <span class="tl-stat-item">👤 <span class="tl-stat-val" id="tl-stat-actors">0</span> unique actors</span>
-        <span class="tl-stat-sep">·</span>
-        <span class="tl-stat-item">Last: <span class="tl-stat-val" id="tl-stat-last">—</span></span>
-      </div>
-
-      <div id="timeline-container" class="timeline-container"></div>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
-         SCREEN 4 — VERIFY
+         SCREEN 4 — FORENSIC VERIFICATION SUITE (MULTI-PANE)
          ══════════════════════════════════════════════════════════ -->
     <section class="screen" id="screen-verify">
       <div class="screen-header">
-        <span class="screen-eyebrow">Proof · 04</span>
-        <h1>Verify File</h1>
-        <p class="screen-sub">
-          Upload any copy of a file — original or possibly tampered. VERITRACE
-          recomputes its SHA-256 hash, replays every Ed25519 signature in the
-          custody chain, and returns a deterministic verdict.
-        </p>
+        <span class="screen-eyebrow">04 · FORENSIC VERIFICATION</span>
+        <h1>Chain Audit & Forensic Analysis</h1>
+        <p class="screen-sub">Replay cryptographic Ed25519 signatures, audit Merkle tree integrity, and inspect multi-modal forensic signals.</p>
       </div>
 
-      <div class="card">
-        <!-- File selector dropdown -->
-        <div class="form-group">
-          <label for="verify-file-select">Select Registered File</label>
-          <select id="verify-file-select">
-            <option value="">— select or paste ID below —</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="verify-file-id">File ID</label>
-          <input type="text" id="verify-file-id" placeholder="Paste the file UUID" class="mono" />
-        </div>
-        <div class="drop-zone" id="verify-dropzone">
-          <div class="drop-icon">🔍</div>
-          <p><strong>Auto-Verifies Current Ledger State.</strong></p>
-          <p class="muted" style="font-size:12px;margin-top:2px">(Optional) Drop an external file here to test tamper/modification, or leave empty to verify the registered file directly</p>
-          <input type="file" id="verify-file" class="hidden-input" />
-          <p class="drop-filename" id="verify-filename"></p>
-          <button type="button" id="btn-clear-verify-file" class="btn-ghost hidden" style="margin-top:6px;font-size:11px;color:#f87171;padding:2px 8px;border:1px solid rgba(248,113,113,0.3);border-radius:4px">✕ Clear external file (verify registered file directly)</button>
-        </div>
-
-        <!-- SHA-256 preview for the file being verified -->
-        <div class="sha-preview hidden" id="verify-sha-preview">
-          <span class="sha-preview-label">SHA-256 (current)</span>
-          <span class="sha-preview-val" id="verify-sha-val">Computing…</span>
-          <button class="btn-copy" onclick="copyEl('verify-sha-val', this)">⎘ copy</button>
-        </div>
-
-        <button class="btn btn-primary" id="btn-verify">Verify Chain →</button>
-      </div>
-
-      <!-- Verdict badge -->
-      <div id="verdict-wrap" class="verdict-wrap hidden">
-        <div id="verdict-subject" style="font-size:12px;color:var(--vt-cyan);font-family:var(--vt-font-mono);margin-bottom:8px"></div>
-        <div id="verdict-badge" class="badge"></div>
-        <div id="verdict-detail" class="verdict-detail"></div>
-      </div>
-
-      <!-- Hash comparison panel (shown on content-hash TAMPERED) -->
-      <div id="hash-compare" class="hash-compare hidden">
-        <div class="hash-compare-title">⚠ SHA-256 Hash Mismatch Detected</div>
-        <div class="hash-row">
-          <div class="hash-row-label">Expected — Last Recorded State in Ledger</div>
-          <div class="hash-row-val expected" id="hash-expected"></div>
-        </div>
-        <div class="hash-row">
-          <div class="hash-row-label">Current — File as Submitted Now</div>
-          <div class="hash-row-val current" id="hash-current"></div>
-        </div>
-      </div>
-
-      <!-- Chain verification report table -->
-      <div id="verify-chain-panel" class="verify-chain-panel hidden">
-        <div class="verify-chain-title">Chain Verification Report</div>
-        <div id="verify-chain-table" class="verify-chain-table"></div>
-      </div>
-
-      <!-- FC-03-B: Editorial Transformation & Content Forgery Discrimination Panel -->
-      <div id="editorial-wrap" class="card hidden" style="margin-top:24px;border-left:4px solid var(--vt-cyan)">
-        <div class="ela-header" style="flex-wrap:wrap;gap:8px">
-          <div>
-            <span class="ela-title">🛡️ Editorial Transformation & Content Forgery Discrimination</span>
-            <div id="editorial-file-meta" style="font-size:11px;color:var(--vt-cyan);margin-top:2px;font-family:var(--vt-font-mono)"></div>
-          </div>
-          <span id="editorial-status-pill" class="badge" style="font-size:11px;padding:3px 10px"></span>
-        </div>
-
-        <!-- Forgery Surface Area Meter / Gauge -->
-        <div style="margin: 14px 0 16px 0; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-            <span style="font-size:12px; font-weight:600; color:var(--vt-text)">Altered Canvas Surface Area (Semantic Forgery Ratio)</span>
-            <span id="forgery-gauge-val" style="font-size:12px; font-weight:700; font-family:var(--vt-font-mono)">0.0%</span>
-          </div>
-          <div style="position:relative; height:12px; background:rgba(255,255,255,0.08); border-radius:6px; overflow:hidden">
-            <div id="forgery-gauge-bar" style="height:100%; width:0%; transition:width 0.6s cubic-bezier(0.16, 1, 0.3, 1)"></div>
-            <!-- 15% threshold marker -->
-            <div style="position:absolute; left:15%; top:0; bottom:0; width:2px; background:var(--vt-red); z-index:2" title="15% Content Forgery Red-Line"></div>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--vt-muted); margin-top:4px">
-            <span>0% (Exact Match)</span>
-            <span style="color:var(--vt-red);font-weight:600">▲ 15% Forgery Red-Line</span>
-            <span>100%</span>
-          </div>
-        </div>
-
-        <div id="editorial-summary-text" style="font-size:13px;color:var(--vt-text);line-height:1.5;margin-bottom:14px"></div>
-
-        <!-- Visual Canvas & Heatmap Overlay Section -->
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          <div style="flex:1;min-width:260px">
-            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-cyan)">Candidate Image & Localization Overlay</div>
-            <div style="position:relative;display:inline-block;max-width:100%">
-              <canvas id="editorial-canvas" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1);display:block"></canvas>
+      <div class="workbench-grid">
+        <!-- Left Panel: Verification Target & Verdict Inspector -->
+        <div class="workbench-panel">
+          <div class="card">
+            <div class="card-title-bar">
+              <span class="card-title">Verification Target</span>
+              <span class="card-badge" style="background:var(--vt-emerald-glass);color:var(--vt-emerald-light)">Signature Audit</span>
             </div>
-            <div id="editorial-canvas-legend" style="font-size:11px;color:var(--vt-muted);margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
-              <span style="color:#38bdf8">■ Cyan: Aligned Genesis Crop</span>
-              <span style="color:#ef4444">■ Red: Localized Forgery Splice</span>
+
+            <!-- File selector dropdown -->
+            <div class="form-group">
+              <label for="verify-file-select">Select Asset from Ledger</label>
+              <select id="verify-file-select">
+                <option value="">— select registered asset or enter ID below —</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="verify-file-id">Asset Identifier (UUID)</label>
+              <input type="text" id="verify-file-id" placeholder="Paste file UUID" class="mono" />
+            </div>
+
+            <div class="drop-zone" id="verify-dropzone">
+              <p style="font-weight:600">Drop candidate file or <span class="drop-link">browse</span></p>
+              <input type="file" id="verify-file" class="hidden-input" />
+              <p class="drop-filename" id="verify-filename"></p>
+              <button type="button" id="btn-clear-verify-file" class="btn-ghost hidden" style="margin-top:6px;font-size:0.75rem;padding:2px 8px">Clear Candidate</button>
+            </div>
+
+            <!-- SHA-256 preview for candidate -->
+            <div class="sha-preview hidden" id="verify-sha-preview">
+              <span class="sha-preview-label">Candidate SHA</span>
+              <span class="sha-preview-val" id="verify-sha-val">Computing…</span>
+              <button class="btn-copy" onclick="copyEl('verify-sha-val', this)">Copy</button>
+            </div>
+
+            <button class="btn btn-primary" id="btn-verify" style="width:100%">Run Verification Audit</button>
+          </div>
+
+          <!-- Verdict badge wrap -->
+          <div id="verdict-wrap" class="verdict-wrap hidden">
+            <div id="verdict-subject" style="font-size:0.78rem;color:var(--vt-teal-light);font-family:var(--font-mono);margin-bottom:8px"></div>
+            <div id="verdict-badge" class="badge"></div>
+            <div id="verdict-detail" class="verdict-detail"></div>
+          </div>
+
+          <!-- Hash comparison panel (shown on content-hash TAMPERED) -->
+          <div id="hash-compare" class="hash-compare hidden">
+            <div class="hash-compare-title">SHA-256 Hash Mismatch Detected</div>
+            <div class="hash-row">
+              <div class="hash-row-label">Expected — Last Recorded State in Ledger</div>
+              <div class="hash-row-val expected" id="hash-expected"></div>
+            </div>
+            <div class="hash-row">
+              <div class="hash-row-label">Current — Candidate File Evaluated</div>
+              <div class="hash-row-val current" id="hash-current"></div>
             </div>
           </div>
-          <div style="flex:1;min-width:260px">
-            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-purple)">Forensic Difference Heatmap</div>
-            <img id="editorial-diff-img" src="" alt="Forensic Difference Heatmap" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1);display:block" />
-            <div style="font-size:11px;color:var(--vt-muted);margin-top:6px">Pixel delta heatmap normalized against JPEG compression tolerance</div>
-          </div>
         </div>
-      </div>
 
-      <!-- ELA heatmap -->
-      <div id="ela-wrap" class="card ela-wrap hidden">
-        <div class="ela-header" style="flex-wrap:wrap;gap:8px">
-          <div>
-            <span class="ela-title">📡 ELA Heatmap</span>
-            <div id="ela-file-meta" style="font-size:11px;color:var(--vt-cyan);margin-top:2px;font-family:var(--vt-font-mono)"></div>
+        <!-- Right Panel: Forensic Reports & Deep Analysis Suite -->
+        <div class="workbench-panel">
+          <!-- Chain verification report table -->
+          <div id="verify-chain-panel" class="card hidden">
+            <div class="card-title-bar">
+              <span class="card-title">Cryptographic Chain Verification Report</span>
+              <span class="card-badge" style="background:var(--vt-emerald-glass);color:var(--vt-emerald-light)">Signature Replay</span>
+            </div>
+            <div id="verify-chain-table" class="verify-chain-table"></div>
           </div>
-          <span class="ela-label">Supporting forensic signal only — heuristic, not cryptographic proof</span>
-        </div>
-        <img id="ela-img" src="" alt="ELA heatmap" class="ela-img" />
-      </div>
 
-      <!-- Semantic NLP Risk Assessment -->
-      <div id="semantic-wrap" class="card hidden" style="margin-top:16px;border-left:4px solid #a855f7">
-        <div class="ela-header">
-          <span class="ela-title">🧠 NLP Semantic Impact Assessment</span>
-          <span id="semantic-risk-badge" class="badge" style="font-size:11px;padding:3px 10px"></span>
-        </div>
-        <p id="semantic-summary" style="font-size:13px;color:var(--vt-text);margin:8px 0;line-height:1.5"></p>
-        <div id="semantic-details" style="font-size:12px;margin-top:6px"></div>
-      </div>
+          <!-- Editorial Transformation & Content Forgery Discrimination Panel -->
+          <div id="editorial-wrap" class="card hidden">
+            <div class="card-title-bar">
+              <div>
+                <span class="card-title">Editorial Transformation & Forgery Discrimination</span>
+                <div id="editorial-file-meta" style="font-size:0.72rem;color:var(--vt-teal-light);margin-top:2px;font-family:var(--font-mono)"></div>
+              </div>
+              <span id="editorial-status-pill" class="badge" style="font-size:0.75rem;padding:3px 8px;margin-bottom:0"></span>
+            </div>
 
-      <!-- Advanced Frequency Domain Forensics (2D-FFT & Block-DCT) -->
-      <div id="freq-wrap" class="card hidden" style="margin-top:16px">
-        <div class="ela-header" style="flex-wrap:wrap;gap:8px">
-          <div>
-            <span class="ela-title">🔬 Frequency Domain Forensics</span>
-            <div id="freq-file-meta" style="font-size:11px;color:var(--vt-cyan);margin-top:2px;font-family:var(--vt-font-mono)"></div>
+            <!-- Forgery Surface Area Meter -->
+            <div style="margin:10px 0 14px 0;background:var(--vt-surface-elevated);border:1px solid var(--vt-border);border-radius:var(--radius-xs);padding:10px 14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-size:0.78rem;font-weight:600;color:var(--vt-text)">Altered Canvas Surface Area (Semantic Forgery Ratio)</span>
+                <span id="forgery-gauge-val" style="font-size:0.82rem;font-weight:700;font-family:var(--font-mono);color:var(--vt-emerald-light)">0.0%</span>
+              </div>
+              <div style="position:relative;height:8px;background:var(--vt-panel);border-radius:4px;overflow:hidden">
+                <div id="forgery-gauge-bar" style="height:100%;width:0%;transition:width 0.6s cubic-bezier(0.16, 1, 0.3, 1)"></div>
+                <div style="position:absolute;left:15%;top:0;bottom:0;width:2px;background:var(--vt-crimson);z-index:2" title="15% Content Forgery Threshold"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--vt-subdued);margin-top:4px;font-family:var(--font-mono)">
+                <span>0% (Exact Match)</span>
+                <span style="color:var(--vt-crimson-light);font-weight:600">▲ 15% Forgery Threshold</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            <div id="editorial-summary-text" style="font-size:0.82rem;color:var(--vt-text-secondary);line-height:1.5;margin-bottom:12px"></div>
+
+            <!-- Visual Canvas & Heatmap Overlay Section -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div>
+                <div style="font-weight:600;font-size:0.78rem;margin-bottom:6px;color:var(--vt-teal-light);font-family:var(--font-mono)">Candidate Image & Localization Overlay</div>
+                <div class="cyber-viewport">
+                  <div class="cyber-viewport-banner">
+                    <span>[ SENSOR: OPTICAL_FORENSIC ]</span>
+                    <span class="cyber-viewport-banner-stat">CH: RGB // CAL: 1.0X</span>
+                  </div>
+                  <canvas id="editorial-canvas" style="max-width:100%;border:none;display:block"></canvas>
+                </div>
+                <div id="editorial-canvas-legend" style="font-size:0.7rem;color:var(--vt-subdued);margin-top:4px;display:flex;gap:10px;font-family:var(--font-mono)">
+                  <span style="color:var(--vt-teal-light)">■ Teal: Aligned Genesis Crop</span>
+                  <span style="color:var(--vt-crimson-light)">■ Crimson: Localized Forgery Splice</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-weight:600;font-size:0.78rem;margin-bottom:6px;color:var(--vt-indigo-light);font-family:var(--font-mono)">Forensic Difference Heatmap</div>
+                <div class="cyber-viewport">
+                  <div class="cyber-viewport-banner">
+                    <span>[ THERMAL: DIFF_RESIDUAL ]</span>
+                    <span class="cyber-viewport-banner-stat">RANGE: 0..255</span>
+                  </div>
+                  <img id="editorial-diff-img" src="" alt="Forensic Difference Heatmap" style="max-width:100%;border:none;display:block" />
+                </div>
+                
+              </div>
+            </div>
           </div>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">
-          <div style="flex:1;min-width:240px">
-            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-cyan)">2D-FFT Power Spectrum (AI Grid Detection)</div>
-            <img id="fft-img" src="" alt="2D-FFT Spectrum" style="width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1)" />
-            <p id="fft-summary" style="font-size:11px;color:var(--vt-muted);margin-top:6px"></p>
+
+          <!-- ELA heatmap -->
+          <div id="ela-wrap" class="card hidden">
+            <div class="ela-header" style="flex-wrap:wrap;gap:8px">
+              <div>
+                <span class="ela-title">Error Level Analysis (ELA)</span>
+                <div id="ela-file-meta" style="font-size:0.72rem;color:var(--vt-teal-light);margin-top:2px;font-family:var(--font-mono)"></div>
+              </div>
+              
+            </div>
+            <div class="cyber-viewport">
+              <div class="cyber-viewport-banner">
+                <span>[ SPECTRUM: ELA_RESIDUAL ]</span>
+                <span class="cyber-viewport-banner-stat">SCALE: 10X // QUALITY: AUTO</span>
+              </div>
+              <img id="ela-img" src="" alt="ELA heatmap" class="ela-img" style="border:none;display:block" />
+            </div>
           </div>
-          <div style="flex:1;min-width:240px">
-            <div style="font-weight:600;font-size:12px;margin-bottom:6px;color:var(--vt-purple)">8x8 Block-DCT Splicing Localization</div>
-            <img id="dct-img" src="" alt="Block-DCT Splicing" style="width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.1)" />
-            <p id="dct-summary" style="font-size:11px;color:var(--vt-muted);margin-top:6px"></p>
+
+          <!-- Semantic NLP Risk Assessment -->
+          <div id="semantic-wrap" class="card hidden">
+            <div class="ela-header">
+              <span class="ela-title">Semantic NLP Impact Assessment</span>
+              <span id="semantic-risk-badge" class="badge" style="font-size:0.75rem;padding:3px 8px;margin-bottom:0"></span>
+            </div>
+            <p id="semantic-summary" style="font-size:0.85rem;color:var(--vt-text);margin:6px 0;line-height:1.5"></p>
+            <div id="semantic-details" style="font-size:0.78rem;margin-top:6px"></div>
+          </div>
+
+          <!-- Frequency Domain Forensics (2D-FFT & Block-DCT) -->
+          <div id="freq-wrap" class="card hidden">
+            <div class="ela-header" style="flex-wrap:wrap;gap:8px">
+              <div>
+                <span class="ela-title">Frequency Domain Forensics</span>
+                <div id="freq-file-meta" style="font-size:0.72rem;color:var(--vt-teal-light);margin-top:2px;font-family:var(--font-mono)"></div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px">
+              <div>
+                <div style="font-weight:600;font-size:0.75rem;margin-bottom:4px;color:var(--vt-teal-light);font-family:var(--font-mono)">2D-FFT Power Spectrum (AI Grid Detection)</div>
+                <div class="cyber-viewport">
+                  <div class="cyber-viewport-banner">
+                    <span>[ FREQ: 2D_FFT ]</span>
+                    <span class="cyber-viewport-banner-stat">PEAK_DETECT: SYNC</span>
+                  </div>
+                  <img id="fft-img" src="" alt="2D-FFT Spectrum" style="width:100%;border:none;display:block" />
+                </div>
+                <p id="fft-summary" style="font-size:0.72rem;color:var(--vt-subdued);margin-top:4px;font-family:var(--font-mono)"></p>
+              </div>
+              <div>
+                <div style="font-weight:600;font-size:0.75rem;margin-bottom:4px;color:var(--vt-indigo-light);font-family:var(--font-mono)">8x8 Block-DCT Splicing Localization</div>
+                <div class="cyber-viewport">
+                  <div class="cyber-viewport-banner">
+                    <span>[ SPATIAL: 8x8_DCT ]</span>
+                    <span class="cyber-viewport-banner-stat">MAP: QUANT_BLOCKS</span>
+                  </div>
+                  <img id="dct-img" src="" alt="Block-DCT Splicing" style="width:100%;border:none;display:block" />
+                </div>
+                <p id="dct-summary" style="font-size:0.72rem;color:var(--vt-subdued);margin-top:4px;font-family:var(--font-mono)"></p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
-         TOAST CONTAINER
+         TOAST NOTIFICATION CONTAINER
          ══════════════════════════════════════════════════════════ -->
     <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+  <div style="display:none" aria-hidden="true"><span id="hero-ticker"></span><button id="btn-quick-demo"></button><button id="btn-reset-demo"></button></div>
   </div>
 
   <script src="app.js"></script>
